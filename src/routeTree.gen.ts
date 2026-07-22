@@ -9,86 +9,115 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as RulesRouteImport } from './routes/rules'
-import { Route as LeaguesLeagueIdRouteImport } from './routes/leagues.$leagueId'
+import { Route as LayoutRouteImport } from './routes/_layout'
+import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
+import { Route as LayoutRulesRouteImport } from './routes/_layout/rules'
+import { Route as LayoutLeaguesSlugRouteImport } from './routes/_layout/leagues.$slug'
 
-const IndexRoute = IndexRouteImport.update({
+const LayoutRoute = LayoutRouteImport.update({
+  id: '/_layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LayoutIndexRoute = LayoutIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LayoutRoute,
 } as any)
-const RulesRoute = RulesRouteImport.update({
+const LayoutRulesRoute = LayoutRulesRouteImport.update({
   id: '/rules',
   path: '/rules',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => LayoutRoute,
 } as any)
-const LeaguesLeagueIdRoute = LeaguesLeagueIdRouteImport.update({
-  id: '/leagues/$leagueId',
-  path: '/leagues/$leagueId',
-  getParentRoute: () => rootRouteImport,
+const LayoutLeaguesSlugRoute = LayoutLeaguesSlugRouteImport.update({
+  id: '/leagues/$slug',
+  path: '/leagues/$slug',
+  getParentRoute: () => LayoutRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/rules': typeof RulesRoute
-  '/leagues/$leagueId': typeof LeaguesLeagueIdRoute
+  '/': typeof LayoutIndexRoute
+  '/rules': typeof LayoutRulesRoute
+  '/leagues/$slug': typeof LayoutLeaguesSlugRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/rules': typeof RulesRoute
-  '/leagues/$leagueId': typeof LeaguesLeagueIdRoute
+  '/rules': typeof LayoutRulesRoute
+  '/': typeof LayoutIndexRoute
+  '/leagues/$slug': typeof LayoutLeaguesSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/rules': typeof RulesRoute
-  '/leagues/$leagueId': typeof LeaguesLeagueIdRoute
+  '/_layout': typeof LayoutRouteWithChildren
+  '/_layout/rules': typeof LayoutRulesRoute
+  '/_layout/': typeof LayoutIndexRoute
+  '/_layout/leagues/$slug': typeof LayoutLeaguesSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/rules' | '/leagues/$leagueId'
+  fullPaths: '/' | '/rules' | '/leagues/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/rules' | '/leagues/$leagueId'
-  id: '__root__' | '/' | '/rules' | '/leagues/$leagueId'
+  to: '/rules' | '/' | '/leagues/$slug'
+  id:
+    | '__root__'
+    | '/_layout'
+    | '/_layout/rules'
+    | '/_layout/'
+    | '/_layout/leagues/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  RulesRoute: typeof RulesRoute
-  LeaguesLeagueIdRoute: typeof LeaguesLeagueIdRoute
+  LayoutRoute: typeof LayoutRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_layout': {
+      id: '/_layout'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof LayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_layout/': {
+      id: '/_layout/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof LayoutIndexRouteImport
+      parentRoute: typeof LayoutRoute
     }
-    '/rules': {
-      id: '/rules'
+    '/_layout/rules': {
+      id: '/_layout/rules'
       path: '/rules'
       fullPath: '/rules'
-      preLoaderRoute: typeof RulesRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof LayoutRulesRouteImport
+      parentRoute: typeof LayoutRoute
     }
-    '/leagues/$leagueId': {
-      id: '/leagues/$leagueId'
-      path: '/leagues/$leagueId'
-      fullPath: '/leagues/$leagueId'
-      preLoaderRoute: typeof LeaguesLeagueIdRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_layout/leagues/$slug': {
+      id: '/_layout/leagues/$slug'
+      path: '/leagues/$slug'
+      fullPath: '/leagues/$slug'
+      preLoaderRoute: typeof LayoutLeaguesSlugRouteImport
+      parentRoute: typeof LayoutRoute
     }
   }
 }
 
+interface LayoutRouteChildren {
+  LayoutRulesRoute: typeof LayoutRulesRoute
+  LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutLeaguesSlugRoute: typeof LayoutLeaguesSlugRoute
+}
+
+const LayoutRouteChildren: LayoutRouteChildren = {
+  LayoutRulesRoute: LayoutRulesRoute,
+  LayoutIndexRoute: LayoutIndexRoute,
+  LayoutLeaguesSlugRoute: LayoutLeaguesSlugRoute,
+}
+
+const LayoutRouteWithChildren =
+  LayoutRoute._addFileChildren(LayoutRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  RulesRoute: RulesRoute,
-  LeaguesLeagueIdRoute: LeaguesLeagueIdRoute,
+  LayoutRoute: LayoutRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

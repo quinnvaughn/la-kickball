@@ -1,5 +1,6 @@
-import { z } from "zod";
-import { publicProcedure, router } from "./trpc";
+import { z } from "zod"
+import { leaguesRouter } from "./routers/leagues"
+import { publicProcedure, router } from "./trpc"
 
 export const appRouter = router({
 	healthcheck: publicProcedure
@@ -12,6 +13,7 @@ export const appRouter = router({
 			ok: true,
 			message: input.name ? `Hello, ${input.name}` : "Hello from tRPC",
 		})),
-});
+	leagues: leaguesRouter,
+})
 
-export type AppRouter = typeof appRouter;
+export type AppRouter = typeof appRouter

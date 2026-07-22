@@ -3,17 +3,15 @@ import { css } from "styled-system/css"
 import { VStack } from "styled-system/jsx"
 
 type Props = {
-	leagueId: string
+	slug: string
 	name: string
-	division: string
-	status: string
 }
 
-export function LeagueCard({ leagueId, name, division, status }: Props) {
+export function LeagueCard({ slug, name }: Props) {
 	return (
 		<Link
-			to="/leagues/$leagueId"
-			params={{ leagueId }}
+			to="/leagues/$slug"
+			params={{ slug }}
 			className={css({
 				textDecoration: "none",
 				display: "block",
@@ -42,24 +40,8 @@ export function LeagueCard({ leagueId, name, division, status }: Props) {
 						color: "rgba(27,42,74,0.6)",
 					})}
 				>
-					{division}
+					1 season running
 				</p>
-				<div
-					className={css({
-						display: "inline-block",
-						fontFamily: "label",
-						textTransform: "uppercase",
-						fontSize: "xs",
-						letterSpacing: "wider",
-						color: "teal.dark",
-						background: "rgba(0,169,157,0.12)",
-						py: "1",
-						px: "2.5",
-						borderRadius: "full",
-					})}
-				>
-					{status}
-				</div>
 			</VStack>
 		</Link>
 	)

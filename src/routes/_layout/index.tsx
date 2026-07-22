@@ -6,23 +6,20 @@ import { Hero } from "#/components/landing-page/hero"
 import { LeagueCard } from "#/components/landing-page/league-card"
 import { LPSection } from "#/components/landing-page/lp-section"
 import { StepItem } from "#/components/landing-page/step-item"
-import { Footer } from "#/components/nav/footer"
-import { Topbar } from "#/components/nav/topbar"
-import { trpc } from "../server/client"
+import { trpc } from "../../server/client"
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_layout/")({
 	loader: async () => {
-		return trpc.healthcheck.query({ name: "TanStack" })
+		return trpc.leagues.list.query()
 	},
 	component: Home,
 })
 
 function Home() {
-	Route.useLoaderData()
+	const leagues = Route.useLoaderData()
 
 	return (
 		<div>
-			<Topbar />
 			<Hero />
 			<div
 				className={css({
@@ -39,12 +36,13 @@ function Home() {
 							gap: "4",
 						})}
 					>
-						<LeagueCard
-							leagueId="cheviot-hills"
-							name="Cheviot Hills"
-							division="Coed"
-							status="Registration Open"
-						/>
+						{leagues.map((league) => (
+							<LeagueCard
+								key={league.id}
+								slug={league.slug}
+								name={league.name}
+							/>
+						))}
 					</div>
 				</LPSection>
 				<LPSection heading="What you get">
@@ -133,7 +131,6 @@ function Home() {
 						/>
 					</div>
 				</LPSection>
-				<Footer />
 			</div>
 		</div>
 	)

@@ -5,7 +5,7 @@ const serverEnvSchema = z.object({
 	DATABASE_URL: z
 		.string()
 		.min(1)
-		.default("postgres://postgres:postgres@localhost:5432/postgres"),
+		.default("postgres://postgres:postgres@localhost:5432/la_kickball"),
 })
 
 function readEnvValue(key: string) {

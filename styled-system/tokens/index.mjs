@@ -731,6 +731,10 @@ const tokens = {
     "value": "\"Baloo 2\", sans-serif",
     "variable": "var(--fonts-heading)"
   },
+  "fonts.label": {
+    "value": "\"Space Mono\", monospace",
+    "variable": "var(--fonts-label)"
+  },
   "colors.current": {
     "value": "currentColor",
     "variable": "var(--colors-current)"

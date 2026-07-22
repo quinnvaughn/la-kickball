@@ -6,7 +6,7 @@ import { container } from "./nav-styling"
 
 export function Footer() {
 	return (
-		<div className={css({ pb: "10" })}>
+		<div className={css({ py: "4", px: "8" })}>
 			<footer className={container}>
 				<Logo />
 				<HStack gap="3">
