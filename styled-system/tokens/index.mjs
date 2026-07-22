@@ -1759,6 +1759,10 @@ const tokens = {
     "value": "#1B2A4A",
     "variable": "var(--colors-ink)"
   },
+  "colors.border": {
+    "value": "rgba(27,42,74,0.12)",
+    "variable": "var(--colors-border)"
+  },
   "breakpoints.sm": {
     "value": "640px",
     "variable": "var(--breakpoints-sm)"

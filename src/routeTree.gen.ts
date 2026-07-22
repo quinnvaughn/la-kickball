@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutRulesRouteImport } from './routes/_layout/rules'
-import { Route as LayoutLeaguesSlugRouteImport } from './routes/_layout/leagues.$slug'
+import { Route as ApiTrpcSplatRouteImport } from './routes/api/trpc/$'
+import { Route as LayoutLeaguesSlugIndexRouteImport } from './routes/_layout/leagues/$slug/index'
+import { Route as LayoutLeaguesSlugSeasonIndexRouteImport } from './routes/_layout/leagues/$slug/$season/index'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -28,44 +30,70 @@ const LayoutRulesRoute = LayoutRulesRouteImport.update({
   path: '/rules',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutLeaguesSlugRoute = LayoutLeaguesSlugRouteImport.update({
-  id: '/leagues/$slug',
-  path: '/leagues/$slug',
+const ApiTrpcSplatRoute = ApiTrpcSplatRouteImport.update({
+  id: '/api/trpc/$',
+  path: '/api/trpc/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LayoutLeaguesSlugIndexRoute = LayoutLeaguesSlugIndexRouteImport.update({
+  id: '/leagues/$slug/',
+  path: '/leagues/$slug/',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutLeaguesSlugSeasonIndexRoute =
+  LayoutLeaguesSlugSeasonIndexRouteImport.update({
+    id: '/leagues/$slug/$season/',
+    path: '/leagues/$slug/$season/',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/rules': typeof LayoutRulesRoute
-  '/leagues/$slug': typeof LayoutLeaguesSlugRoute
+  '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/leagues/$slug/': typeof LayoutLeaguesSlugIndexRoute
+  '/leagues/$slug/$season/': typeof LayoutLeaguesSlugSeasonIndexRoute
 }
 export interface FileRoutesByTo {
   '/rules': typeof LayoutRulesRoute
   '/': typeof LayoutIndexRoute
-  '/leagues/$slug': typeof LayoutLeaguesSlugRoute
+  '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/leagues/$slug': typeof LayoutLeaguesSlugIndexRoute
+  '/leagues/$slug/$season': typeof LayoutLeaguesSlugSeasonIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_layout': typeof LayoutRouteWithChildren
   '/_layout/rules': typeof LayoutRulesRoute
   '/_layout/': typeof LayoutIndexRoute
-  '/_layout/leagues/$slug': typeof LayoutLeaguesSlugRoute
+  '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/_layout/leagues/$slug/': typeof LayoutLeaguesSlugIndexRoute
+  '/_layout/leagues/$slug/$season/': typeof LayoutLeaguesSlugSeasonIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/rules' | '/leagues/$slug'
+  fullPaths:
+    | '/'
+    | '/rules'
+    | '/api/trpc/$'
+    | '/leagues/$slug/'
+    | '/leagues/$slug/$season/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/rules' | '/' | '/leagues/$slug'
+  to:
+    '/rules' | '/' | '/api/trpc/$' | '/leagues/$slug' | '/leagues/$slug/$season'
   id:
     | '__root__'
     | '/_layout'
     | '/_layout/rules'
     | '/_layout/'
-    | '/_layout/leagues/$slug'
+    | '/api/trpc/$'
+    | '/_layout/leagues/$slug/'
+    | '/_layout/leagues/$slug/$season/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   LayoutRoute: typeof LayoutRouteWithChildren
+  ApiTrpcSplatRoute: typeof ApiTrpcSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -91,11 +119,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutRulesRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/leagues/$slug': {
-      id: '/_layout/leagues/$slug'
+    '/api/trpc/$': {
+      id: '/api/trpc/$'
+      path: '/api/trpc/$'
+      fullPath: '/api/trpc/$'
+      preLoaderRoute: typeof ApiTrpcSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_layout/leagues/$slug/': {
+      id: '/_layout/leagues/$slug/'
       path: '/leagues/$slug'
-      fullPath: '/leagues/$slug'
-      preLoaderRoute: typeof LayoutLeaguesSlugRouteImport
+      fullPath: '/leagues/$slug/'
+      preLoaderRoute: typeof LayoutLeaguesSlugIndexRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/leagues/$slug/$season/': {
+      id: '/_layout/leagues/$slug/$season/'
+      path: '/leagues/$slug/$season'
+      fullPath: '/leagues/$slug/$season/'
+      preLoaderRoute: typeof LayoutLeaguesSlugSeasonIndexRouteImport
       parentRoute: typeof LayoutRoute
     }
   }
@@ -104,13 +146,15 @@ declare module '@tanstack/react-router' {
 interface LayoutRouteChildren {
   LayoutRulesRoute: typeof LayoutRulesRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
-  LayoutLeaguesSlugRoute: typeof LayoutLeaguesSlugRoute
+  LayoutLeaguesSlugIndexRoute: typeof LayoutLeaguesSlugIndexRoute
+  LayoutLeaguesSlugSeasonIndexRoute: typeof LayoutLeaguesSlugSeasonIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutRulesRoute: LayoutRulesRoute,
   LayoutIndexRoute: LayoutIndexRoute,
-  LayoutLeaguesSlugRoute: LayoutLeaguesSlugRoute,
+  LayoutLeaguesSlugIndexRoute: LayoutLeaguesSlugIndexRoute,
+  LayoutLeaguesSlugSeasonIndexRoute: LayoutLeaguesSlugSeasonIndexRoute,
 }
 
 const LayoutRouteWithChildren =
@@ -118,6 +162,7 @@ const LayoutRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   LayoutRoute: LayoutRouteWithChildren,
+  ApiTrpcSplatRoute: ApiTrpcSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

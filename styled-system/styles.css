@@ -664,6 +664,7 @@
     --colors-teal-dark: #00625A;
     --colors-sand: #FFF6ED;
     --colors-ink: #1B2A4A;
+    --colors-border: rgba(27,42,74,0.12);
     --breakpoints-sm: 640px;
     --breakpoints-md: 768px;
     --breakpoints-lg: 1024px;
@@ -808,8 +809,44 @@
     padding-block: var(--spacing-6);
 }
 
+  .py_1 {
+    padding-block: var(--spacing-1);
+}
+
+  .px_2 {
+    padding-inline: var(--spacing-2);
+}
+
+  .bd-w_1px {
+    border-width: 1px;
+}
+
+  .border-style_solid {
+    border-style: solid;
+}
+
+  .bd-c_border {
+    border-color: var(--colors-border);
+}
+
+  .bd-b_1px_solid_rgba\(27\,42\,74\,0\.08\) {
+    border-bottom: 1px solid rgba(27,42,74,0.08);
+}
+
+  .li-s_none {
+    list-style: none;
+}
+
   .gap_4 {
     gap: var(--spacing-4);
+}
+
+  .bd-b_1px_solid_rgba\(27\,_42\,_74\,_0\.1\) {
+    border-bottom: 1px solid rgba(27, 42, 74, 0.1);
+}
+
+  .td_underline {
+    text-decoration: underline;
 }
 
   .d_flex {
@@ -956,6 +993,42 @@
     white-space: nowrap;
 }
 
+  .d_inline-block {
+    display: inline-block;
+}
+
+  .fs_xs {
+    font-size: var(--font-sizes-xs);
+}
+
+  .ls_wider {
+    letter-spacing: var(--letter-spacings-wider);
+}
+
+  .c_teal\.dark {
+    color: var(--colors-teal-dark);
+}
+
+  .bg-c_rgba\(0\,169\,157\,0\.12\) {
+    background-color: rgba(0,169,157,0.12);
+}
+
+  .c_ink {
+    color: var(--colors-ink);
+}
+
+  .fw_medium {
+    font-weight: var(--font-weights-medium);
+}
+
+  .c_rgba\(27\,42\,74\,0\.5\) {
+    color: rgba(27,42,74,0.5);
+}
+
+  .c_rgba\(27\,42\,74\,0\.35\) {
+    color: rgba(27,42,74,0.35);
+}
+
   .d_grid {
     display: grid;
 }
@@ -974,6 +1047,14 @@
 
   .grid-tc_1fr {
     grid-template-columns: 1fr;
+}
+
+  .fs_4xl {
+    font-size: var(--font-sizes-4xl);
+}
+
+  .grid-tc_repeat\(auto-fit\,_minmax\(260px\,_1fr\)\) {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 
   .min-h_100vh {
@@ -1008,12 +1089,24 @@
     height: 26px;
 }
 
+  .pt_4 {
+    padding-top: var(--spacing-4);
+}
+
+  .pb_8 {
+    padding-bottom: var(--spacing-8);
+}
+
   .hover\:bd_1px_solid_var\(--colors-purple\):is(:hover, [data-hover]) {
     border: 1px solid var(--colors-purple);
 }
 
   .hover\:bg_coral\.dark:is(:hover, [data-hover]) {
     background: var(--colors-coral-dark);
+}
+
+  .hover\:td_underline:is(:hover, [data-hover]) {
+    text-decoration: underline;
 }
 
   .hover\:c_rgba\(255\,_246\,_237\,_1\):is(:hover, [data-hover]) {

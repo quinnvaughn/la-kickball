@@ -44,6 +44,9 @@ export default defineConfig({
 					ink: {
 						DEFAULT: { value: "#1B2A4A" },
 					},
+					border: {
+						DEFAULT: {value: 'rgba(27,42,74,0.12)'},
+					}
 				},
 			},
 		},

@@ -1,1 +1,5 @@
 export * from "./leagues"
+export * from "./leagues"
+export * from "./relations"
+export * from "./seasons"
+export * from "./seasons"

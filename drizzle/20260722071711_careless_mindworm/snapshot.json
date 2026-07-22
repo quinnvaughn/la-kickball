@@ -1,0 +1,377 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "21c28d2d-3a7a-4914-9784-5ac393e3c8fc",
+  "prevIds": [
+    "9c498ba2-105c-47d3-8191-dc670bdbf000"
+  ],
+  "ddl": [
+    {
+      "values": [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday"
+      ],
+      "name": "day_of_week",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "coed",
+        "mens"
+      ],
+      "name": "season_division",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "winter",
+        "spring",
+        "summer",
+        "fall"
+      ],
+      "name": "season_name",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "leagues",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "seasons",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "leagues"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "leagues"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "slug",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "leagues"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "location_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "leagues"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "location_url",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "leagues"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "leagues"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "leagues"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "season_name",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "season",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "smallint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "year",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "season_division",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "division",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "slug",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "league_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "day_of_week",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "day_of_week",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "time",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "start_time",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "time",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "end_time",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "date",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "start_date",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "smallint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "8",
+      "generated": null,
+      "identity": null,
+      "name": "weeks",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "league_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "leagues",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "seasons_league_id_leagues_id_fk",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "leagues_pkey",
+      "schema": "public",
+      "table": "leagues",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "seasons_pkey",
+      "schema": "public",
+      "table": "seasons",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "league_id",
+        "slug"
+      ],
+      "nullsNotDistinct": false,
+      "name": "seasons_league_id_slug_unique",
+      "entityType": "uniques",
+      "schema": "public",
+      "table": "seasons"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "slug"
+      ],
+      "nullsNotDistinct": false,
+      "name": "leagues_slug_unique",
+      "schema": "public",
+      "table": "leagues",
+      "entityType": "uniques"
+    }
+  ],
+  "renames": []
+}

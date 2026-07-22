@@ -1,27 +1,7 @@
 import { initTRPC } from "@trpc/server"
-import type { Request, Response } from "express"
+import superjson from "superjson"
 
-export interface CreateTRPCContextOptions {
-	req: Request
-	res: Response
-}
-
-export interface AppContext {
-	req: Request
-	res: Response
-}
-
-export function createTRPCContext({
-	req,
-	res,
-}: CreateTRPCContextOptions): AppContext {
-	return {
-		req,
-		res,
-	}
-}
-
-const t = initTRPC.context<AppContext>().create()
+const t = initTRPC.create({ transformer: superjson })
 
 export const router = t.router
 export const publicProcedure = t.procedure

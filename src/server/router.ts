@@ -1,3 +1,4 @@
+import type { inferRouterOutputs } from "@trpc/server"
 import { z } from "zod"
 import { leaguesRouter } from "./routers/leagues"
 import { publicProcedure, router } from "./trpc"
@@ -17,3 +18,4 @@ export const appRouter = router({
 })
 
 export type AppRouter = typeof appRouter
+export type RouterOutputs = inferRouterOutputs<AppRouter>
