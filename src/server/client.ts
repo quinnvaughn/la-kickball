@@ -1,14 +1,16 @@
 import { createTRPCProxyClient, httpBatchLink } from "@trpc/client"
 import superjson from "superjson"
-import { getServerEnv } from "./env"
 import type { AppRouter } from "./router"
 
-const { VITE_TRPC_URL } = getServerEnv()
+const url =
+	typeof window === "undefined"
+		? `http://localhost:${process.env.PORT ?? 3000}/api/trpc`
+		: "/api/trpc"
 
 export const trpc = createTRPCProxyClient<AppRouter>({
 	links: [
 		httpBatchLink({
-			url: VITE_TRPC_URL,
+			url,
 			transformer: superjson,
 		}),
 	],

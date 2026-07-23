@@ -1,0 +1,25 @@
+# fly.toml app configuration file generated for la-kickball on 2026-07-22T16:36:26-07:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'la-kickball'
+primary_region = 'lax'
+
+[build]
+
+[deploy]
+  release_command = 'node scripts/migrate.mjs'
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpus = 1
+  memory_mb = 1024

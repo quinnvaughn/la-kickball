@@ -23,7 +23,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 				content: "width=device-width, initial-scale=1",
 			},
 			{
-				title: "TanStack Start Starter",
+				title: "Los Angeles Kickball",
 			},
 		],
 		links: [

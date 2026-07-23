@@ -10,7 +10,7 @@
     "build": "npm run build:server && npm run build:client",
     "build:client": "vite build && tsc --noEmit",
     "build:server": "vite build --mode server",
-    "start": "NODE_ENV=production node dist/server/server.js",
+    "start": "NODE_ENV=production node .output/server/index.mjs",
     "preview": "NODE_ENV=production tsx ./src/server/server.ts",
     "panda": "panda codegen --config panda.config.ts",
     "panda:watch": "panda --config panda.config.ts --watch",
@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.5",
+    "@flydotio/dockerfile": "^0.7.10",
     "@pandacss/dev": "^1.11.4",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/devtools-vite": "latest",

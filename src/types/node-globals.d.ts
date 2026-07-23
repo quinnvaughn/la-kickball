@@ -1,6 +1,5 @@
 declare namespace NodeJS {
 	interface ProcessEnv {
-		VITE_TRPC_URL?: string;
 		DATABASE_URL?: string;
 	}
 }

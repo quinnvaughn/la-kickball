@@ -1,7 +1,6 @@
 import { z } from "zod"
 
 const serverEnvSchema = z.object({
-	VITE_TRPC_URL: z.url().default("http://localhost:3000/api/trpc"),
 	DATABASE_URL: z
 		.string()
 		.min(1)
@@ -23,7 +22,6 @@ function readEnvValue(key: string) {
 
 export function getServerEnv() {
 	return serverEnvSchema.parse({
-		VITE_TRPC_URL: readEnvValue("VITE_TRPC_URL"),
 		DATABASE_URL: readEnvValue("DATABASE_URL"),
 	})
 }
