@@ -1763,6 +1763,10 @@ const tokens = {
     "value": "rgba(27,42,74,0.12)",
     "variable": "var(--colors-border)"
   },
+  "colors.subtitle": {
+    "value": "rgba(27, 42, 74, 0.6)",
+    "variable": "var(--colors-subtitle)"
+  },
   "breakpoints.sm": {
     "value": "640px",
     "variable": "var(--breakpoints-sm)"

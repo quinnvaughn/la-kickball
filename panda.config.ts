@@ -46,6 +46,9 @@ export default defineConfig({
 					},
 					border: {
 						DEFAULT: {value: 'rgba(27,42,74,0.12)'},
+					},
+					subtitle: {
+						DEFAULT: {value: 'rgba(27, 42, 74, 0.6)'}
 					}
 				},
 			},

@@ -3,13 +3,15 @@ import { DateTime } from "luxon"
 import { css, cx } from "styled-system/css"
 import { VStack } from "styled-system/jsx"
 import type { RouterOutputs } from "#/server/router"
+import { sharedCardStyles } from "./styles"
+import { formatSeasonName, toCapitalize } from "./utils"
 
 type LeagueOutput = RouterOutputs["leagues"]["league"]
 type Season = LeagueOutput["seasons"]["current"][number]
 
 type Props = {
 	season: Season
-	slug: string
+	league: string
 }
 
 const tagStyles = css({
@@ -49,10 +51,6 @@ function getSeasonStatus(
 	return "League Completed"
 }
 
-function toCapitalize(word: string) {
-	return word[0].toUpperCase() + word.slice(1).toLowerCase()
-}
-
 function formatHour(dt: DateTime) {
 	return dt.minute === 0 ? dt.toFormat("h") : dt.toFormat("h:mm")
 }
@@ -71,22 +69,12 @@ function formatTimeRange(startTime: string, endTime: string) {
 	return `${startLabel}-${endLabel}`
 }
 
-export function SeasonCard({ season, slug }: Props) {
+export function SeasonCard({ season, league }: Props) {
 	return (
 		<Link
-			to="/leagues/$slug/$season"
-			params={{ slug, season: season.slug }}
-			className={css({
-				display: "block",
-				background: "#fff",
-				borderWidth: "1px",
-				borderStyle: "solid",
-				borderColor: "border",
-				p: "6",
-				textDecoration: "none",
-				color: "ink",
-				borderRadius: "2xl",
-			})}
+			to="/leagues/$league/$season"
+			params={{ league, season: season.slug }}
+			className={sharedCardStyles}
 		>
 			<VStack gap="3" alignItems="start">
 				<div className={css({ display: "flex", gap: "1.5" })}>
@@ -107,7 +95,7 @@ export function SeasonCard({ season, slug }: Props) {
 							fontSize: "xl",
 						})}
 					>
-						{toCapitalize(season.season)} {season.year}
+						{formatSeasonName(season)}
 					</div>
 					<div
 						className={css({
@@ -121,6 +109,10 @@ export function SeasonCard({ season, slug }: Props) {
 								? formatTimeRange(season.startTime, season.endTime)
 								: season.startTime
 						}`}
+					</div>
+					<div className={css({ color: "subtitle", fontSize: "sm" })}>
+						{season.playerMinimum}-player minimum · {season.weeks}-week season +
+						playoffs
 					</div>
 				</VStack>
 			</VStack>

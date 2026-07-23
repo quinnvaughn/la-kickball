@@ -1,4 +1,4 @@
-import type { Season, seasons } from "../db/schema"
+import type { Season } from "../db/schema"
 
 const SEASON_ORDER = ["winter", "spring", "summer", "fall"] as const
 
@@ -38,9 +38,12 @@ function tupleForSeason(season: Season, now: Date): SeasonTuple {
 	return { year, rank }
 }
 
-export type SeasonStatus = "future" | "current" | "past"
+export type SeasonStatus = "upcoming" | "current" | "past"
 
-export function getSeasonStatus(season: Season, now = new Date()): SeasonStatus {
+export function getSeasonStatus(
+	season: Season,
+	now = new Date(),
+): SeasonStatus {
 	if (season.startDate) {
 		const start = new Date(season.startDate)
 		const end = new Date(start)
@@ -49,32 +52,33 @@ export function getSeasonStatus(season: Season, now = new Date()): SeasonStatus 
 	}
 
 	const cmp = compareTuples(tupleForSeason(season, now), currentTuple(now))
-	if (cmp > 0) return "future"
+	if (cmp > 0) return "upcoming"
 	if (cmp < 0) return "past"
 	return "current"
 }
 
-export const ROSTER_MINIMUM: Record<
-	(typeof seasons.$inferSelect)["division"],
-	number
-> = {
-	coed: 12,
-	mens: 10,
+export const ROSTER_MINIMUM = 12
+
+export type SeasonWithStatus = Season & {
+	status: SeasonStatus
+	playerMinimum: number
 }
 
-export type SeasonWithStatus = Season & { status: SeasonStatus }
-
 export interface BucketedSeasons {
-	future: SeasonWithStatus[]
+	upcoming: SeasonWithStatus[]
 	current: SeasonWithStatus[]
 	past: SeasonWithStatus[]
 }
 
-export function bucketSeasonsByStatus(seasons: Season[]): BucketedSeasons {
-	const buckets: BucketedSeasons = { future: [], current: [], past: [] }
+export function bucketSeasonsByStatus(seasons: Season[]) {
+	const buckets: BucketedSeasons = { upcoming: [], current: [], past: [] }
 
 	for (const season of seasons) {
-		const withStatus = { ...season, status: getSeasonStatus(season) }
+		const withStatus = {
+			...season,
+			status: getSeasonStatus(season),
+			playerMinimum: ROSTER_MINIMUM,
+		}
 		buckets[withStatus.status].push(withStatus)
 	}
 
