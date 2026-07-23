@@ -39,7 +39,7 @@ function Home() {
 						{leagues.map((league) => (
 							<LeagueCard
 								key={league.id}
-								slug={league.slug}
+								league={league.slug}
 								name={league.name}
 							/>
 						))}

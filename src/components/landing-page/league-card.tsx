@@ -3,15 +3,15 @@ import { css } from "styled-system/css"
 import { VStack } from "styled-system/jsx"
 
 type Props = {
-	slug: string
+	league: string
 	name: string
 }
 
-export function LeagueCard({ slug, name }: Props) {
+export function LeagueCard({ league, name }: Props) {
 	return (
 		<Link
-			to="/leagues/$slug"
-			params={{ slug }}
+			to="/leagues/$league"
+			params={{ league }}
 			className={css({
 				textDecoration: "none",
 				display: "block",

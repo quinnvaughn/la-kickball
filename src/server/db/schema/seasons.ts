@@ -1,4 +1,5 @@
 import {
+	type AnyPgColumn,
 	date,
 	pgEnum,
 	pgTable,
@@ -10,6 +11,7 @@ import {
 	uuid,
 } from "drizzle-orm/pg-core"
 import { leagues } from "./leagues"
+import { teams } from "./teams"
 
 export const seasonDivisionEnum = pgEnum("season_division", ["coed", "mens"])
 
@@ -47,6 +49,7 @@ export const seasons = pgTable(
 		startDate: date("start_date"),
 		weeks: smallint("weeks").notNull().default(8),
 
+		winnerId: uuid("winner_id").references((): AnyPgColumn => teams.id),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},
