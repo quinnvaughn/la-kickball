@@ -23,14 +23,14 @@ export const games = pgTable("games", {
 
 	weekId: uuid("week_id")
 		.notNull()
-		.references(() => weeks.id),
+		.references(() => weeks.id, { onDelete: "cascade" }),
 
 	homeTeamId: uuid("home_team_id")
 		.notNull()
-		.references(() => teams.id),
+		.references(() => teams.id, { onDelete: "cascade" }),
 	awayTeamId: uuid("away_team_id")
 		.notNull()
-		.references(() => teams.id),
+		.references(() => teams.id, { onDelete: "cascade" }),
 
 	// Which kind of game this is within its week. "final" is what lets
 	// seasons.winnerId auto-populate once a score lands on this row —

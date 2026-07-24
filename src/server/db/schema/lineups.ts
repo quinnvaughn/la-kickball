@@ -12,10 +12,10 @@ export const lineupEntries = pgTable(
 		id: uuid("id").defaultRandom().primaryKey(),
 		gameId: uuid("game_id")
 			.notNull()
-			.references(() => games.id),
+			.references(() => games.id, { onDelete: "cascade" }),
 		teamId: uuid("team_id")
 			.notNull()
-			.references(() => teams.id),
+			.references(() => teams.id, { onDelete: "cascade" }),
 		userId: uuid("user_id")
 			.notNull()
 			.references(() => users.id),

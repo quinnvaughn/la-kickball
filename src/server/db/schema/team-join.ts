@@ -6,7 +6,7 @@ export const teamJoinRequests = pgTable(
 	{
 		id: uuid("id").defaultRandom().primaryKey(),
 		teamId: uuid("team_id")
-			.references(() => teams.id)
+			.references(() => teams.id, { onDelete: "cascade" })
 			.notNull(),
 		playerId: uuid("player_id").notNull(),
 		createdAt: timestamp("created_at").notNull().defaultNow(),

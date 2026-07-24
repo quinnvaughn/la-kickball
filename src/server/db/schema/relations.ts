@@ -7,6 +7,7 @@ import { leagues } from "./leagues"
 import { lineupEntries } from "./lineups"
 import { mvpAwards } from "./mvp-awards"
 import { seasons } from "./seasons"
+import { sessions } from "./sessions"
 import { teamJoinRequests } from "./team-join"
 import { teamMemberships } from "./team-memberships"
 import { teams } from "./teams"
@@ -28,6 +29,7 @@ const schema = {
 	freeAgentAvailability,
 	freeAgentInvites,
 	lineupEntries,
+	sessions,
 }
 
 export const relations = defineRelations(schema, (r) => ({
@@ -236,7 +238,17 @@ export const relations = defineRelations(schema, (r) => ({
 			to: r.users.id,
 		}),
 	},
+	sessions: {
+		user: r.one.users({
+			from: r.sessions.userId,
+			to: r.users.id,
+		}),
+	},
 	users: {
+		sessions: r.many.sessions({
+			from: r.users.id,
+			to: r.sessions.userId,
+		}),
 		teamMemberships: r.many.teamMemberships({
 			from: r.users.id,
 			to: r.teamMemberships.userId,

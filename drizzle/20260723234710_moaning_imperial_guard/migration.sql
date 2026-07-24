@@ -1,0 +1,1 @@
+ALTER TABLE "game_logs" ADD COLUMN "extra_bases_taken" smallint DEFAULT 0 NOT NULL;

@@ -28,7 +28,7 @@ export const gamePlays = pgTable(
 
 		gameId: uuid("game_id")
 			.notNull()
-			.references(() => games.id),
+			.references(() => games.id, { onDelete: "cascade" }),
 
 		// Explicit order within the game — plays confirmed in quick
 		// succession could share a timestamp, this is the real ordering.

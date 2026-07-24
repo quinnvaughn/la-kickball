@@ -9,7 +9,7 @@ export const gameLogs = pgTable(
 
 		gameId: uuid("game_id")
 			.notNull()
-			.references(() => games.id),
+			.references(() => games.id, { onDelete: "cascade" }),
 		userId: uuid("user_id")
 			.notNull()
 			.references(() => users.id),
@@ -26,6 +26,13 @@ export const gameLogs = pgTable(
 		walks: smallint("walks").notNull().default(0),
 		sacs: smallint("sacs").notNull().default(0),
 
+		// Baserunning value beyond the standard advance for whatever hit
+		// put them in motion — 1st-to-3rd on a single is +1, scoring from
+		// 2nd on a single is also +1, scoring from 1st is +2. This treats
+		// "extra base taken" and "run manufactured via extra bases" as
+		// the same unit of value, which is a real judgment call, not an
+		// obviously correct one
+		extraBasesTaken: smallint("extra_bases_taken").notNull().default(0),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},

@@ -2,6 +2,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { createExpressMiddleware } from "@trpc/server/adapters/express"
 import express from "express"
+import { createExpressContext } from "./context"
 import { appRouter } from "./router"
 
 const PORT =
@@ -19,7 +20,7 @@ export function createServer() {
 		"/api/trpc",
 		createExpressMiddleware({
 			router: appRouter,
-			createContext: () => ({}),
+			createContext: createExpressContext,
 		}),
 	)
 

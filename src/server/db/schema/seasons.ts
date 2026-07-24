@@ -42,14 +42,16 @@ export const seasons = pgTable(
 		slug: text("slug").notNull(),
 		leagueId: uuid("league_id")
 			.notNull()
-			.references(() => leagues.id),
+			.references(() => leagues.id, { onDelete: "cascade" }),
 		dayOfWeek: dayOfWeekEnum("day_of_week").notNull(),
 		startTime: time("start_time"),
 		endTime: time("end_time"),
 		startDate: date("start_date"),
 		weeks: smallint("weeks").notNull().default(8),
 
-		winnerId: uuid("winner_id").references((): AnyPgColumn => teams.id),
+		winnerId: uuid("winner_id").references((): AnyPgColumn => teams.id, {
+			onDelete: "set null",
+		}),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at").defaultNow().notNull(),
 	},

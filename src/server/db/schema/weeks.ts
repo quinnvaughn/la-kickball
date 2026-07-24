@@ -15,7 +15,7 @@ export const weeks = pgTable(
 
 		seasonId: uuid("season_id")
 			.notNull()
-			.references(() => seasons.id),
+			.references(() => seasons.id, { onDelete: "cascade" }),
 
 		// 1-indexed. Regular season weeks come first (1..seasons.weeks),
 		// playoff weeks continue the same sequence rather than resetting —

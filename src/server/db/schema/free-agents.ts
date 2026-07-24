@@ -22,7 +22,7 @@ export const freeAgentAvailability = pgTable(
 			.references(() => users.id),
 		weekId: uuid("week_id")
 			.notNull()
-			.references(() => weeks.id),
+			.references(() => weeks.id, { onDelete: "cascade" }),
 		createdAt: timestamp("created_at").notNull().defaultNow(),
 	},
 	(table) => [unique("one_offer_per_week").on(table.userId, table.weekId)],
@@ -37,13 +37,13 @@ export const freeAgentInvites = pgTable(
 		id: uuid("id").defaultRandom().primaryKey(),
 		teamId: uuid("team_id")
 			.notNull()
-			.references(() => teams.id),
+			.references(() => teams.id, { onDelete: "cascade" }),
 		// The free agent's availability row for the week being invited into —
 		// not a raw userId/weekId pair, so an invite can't exist for a week
 		// the player never opened themselves up for.
 		availabilityId: uuid("availability_id")
 			.notNull()
-			.references(() => freeAgentAvailability.id),
+			.references(() => freeAgentAvailability.id, { onDelete: "cascade" }),
 		createdAt: timestamp("created_at").notNull().defaultNow(),
 		// null = pending, waiting on the free agent.
 		// set = the free agent accepted; this is an offer, not a membership

@@ -6,7 +6,7 @@ export const teams = pgTable("teams", {
 	name: text("name").notNull(),
 	seasonId: uuid("season_id")
 		.notNull()
-		.references(() => seasons.id),
+		.references(() => seasons.id, { onDelete: "cascade" }),
 	description: text("description"),
 	isOpen: boolean("is_open").notNull(),
 	inviteCode: varchar("invite_code", { length: 6 }),

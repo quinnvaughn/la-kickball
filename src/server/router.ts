@@ -1,5 +1,6 @@
 import type { inferRouterOutputs } from "@trpc/server"
 import { z } from "zod"
+import { authRouter } from "./routers/auth"
 import { leaguesRouter } from "./routers/leagues"
 import { publicProcedure, router } from "./trpc"
 
@@ -14,6 +15,7 @@ export const appRouter = router({
 			ok: true,
 			message: input.name ? `Hello, ${input.name}` : "Hello from tRPC",
 		})),
+	auth: authRouter,
 	leagues: leaguesRouter,
 })
 

@@ -18,8 +18,12 @@ export const mvpAwards = pgTable(
 
 		// Exactly one of these two is set — this row is either a week
 		// award or a season award, never both, never neither.
-		weekId: uuid("week_id").references(() => weeks.id),
-		seasonId: uuid("season_id").references(() => seasons.id),
+		weekId: uuid("week_id").references(() => weeks.id, {
+			onDelete: "cascade",
+		}),
+		seasonId: uuid("season_id").references(() => seasons.id, {
+			onDelete: "cascade",
+		}),
 
 		// Required for week awards ("guy" / "girl"), null for season
 		// awards — a season only ever has one overall MVP, coed or not,
