@@ -6,7 +6,15 @@ import { isUniqueConstraintError } from "../db/errors"
 import { gameLogs, games, leagues, seasons, users, weeks } from "../db/schema"
 import { slugify } from "../domain/leagues"
 import { bucketSeasonsByStatus } from "../domain/seasons"
-import { buildCareerLeaders, computeCareerStats } from "../domain/stats"
+import {
+	CAREER_STAT_FIELD_KEYS,
+	type CareerStatsRow,
+	buildCareerLeaders,
+	computeCareerStats,
+	paginateCareerStats,
+	sortCareerStats,
+	toCareerStatsPlayer,
+} from "../domain/stats"
 import { adminProcedure, publicProcedure, router } from "../trpc"
 
 const editableLeagueFields = {
@@ -39,6 +47,8 @@ async function careerTotalsForLeague(leagueId: string) {
 			userId: gameLogs.userId,
 			firstName: users.firstName,
 			lastName: users.lastName,
+			seasons: sql<number>`count(distinct ${seasons.id})`.mapWith(Number),
+			games: sql<number>`count(distinct ${gameLogs.id})`.mapWith(Number),
 			atBats: sql<number>`sum(${gameLogs.atBats})`.mapWith(Number),
 			runs: sql<number>`sum(${gameLogs.runs})`.mapWith(Number),
 			rki: sql<number>`sum(${gameLogs.rki})`.mapWith(Number),
@@ -74,7 +84,11 @@ export const leaguesRouter = router({
 					},
 				},
 				with: {
-					seasons: true,
+					seasons: {
+						with: {
+							winner: true,
+						},
+					},
 				},
 			})
 
@@ -88,6 +102,44 @@ export const leaguesRouter = router({
 				...league,
 				seasons: bucketSeasonsByStatus(league.seasons),
 				careerLeaders: buildCareerLeaders(totals.map(computeCareerStats)),
+			}
+		}),
+
+	careerStats: publicProcedure
+		.input(
+			z.object({
+				slug: z.string(),
+				sortBy: z.enum(CAREER_STAT_FIELD_KEYS).default("atBats"),
+				sortDir: z.enum(["asc", "desc"]).default("desc"),
+				page: z.number().int().min(1).default(1),
+				pageSize: z.number().int().min(1).max(100).default(25),
+			}),
+		)
+		.query(async ({ input }) => {
+			const league = await db.query.leagues.findFirst({
+				where: { slug: { eq: input.slug } },
+			})
+
+			if (!league) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "League not found" })
+			}
+
+			const totals = await careerTotalsForLeague(league.id)
+			const rows: CareerStatsRow[] = totals.map(computeCareerStats)
+
+			const sorted = sortCareerStats(rows, input.sortBy, input.sortDir)
+			const total = sorted.length
+			const totalPages = Math.max(1, Math.ceil(total / input.pageSize))
+			const page = Math.min(input.page, totalPages)
+
+			return {
+				players: paginateCareerStats(sorted, page, input.pageSize).map(
+					toCareerStatsPlayer,
+				),
+				total,
+				page,
+				pageSize: input.pageSize,
+				totalPages,
 			}
 		}),
 

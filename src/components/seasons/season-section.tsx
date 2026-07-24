@@ -5,14 +5,21 @@ import { VStack } from "styled-system/jsx"
 type Props = {
 	heading: string
 	children: React.ReactNode
+	borderBottom?: boolean
 }
 
-export function SeasonSection({ heading, children }: Props) {
+export function SeasonSection({
+	heading,
+	children,
+	borderBottom = true,
+}: Props) {
 	return (
 		<section
 			className={css({
 				py: "10",
-				borderBottom: "1px solid rgba(27,42,74,0.08)",
+				borderBottom: borderBottom
+					? "1px solid rgba(27,42,74,0.08)"
+					: undefined,
 			})}
 		>
 			<VStack alignItems="start" gap="5">

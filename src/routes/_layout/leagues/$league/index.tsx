@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, Link } from "@tanstack/react-router"
 import { css } from "styled-system/css"
 import { match } from "ts-pattern"
+import { LeagueLeaderCard } from "#/components/leagues/league-leader-card"
 import { EmptySeasonCard } from "#/components/seasons/empty-season-card"
 import { SeasonCard } from "#/components/seasons/season-card"
 import { SeasonRow } from "#/components/seasons/season-row"
@@ -16,7 +17,8 @@ export const Route = createFileRoute("/_layout/leagues/$league/")({
 
 function League() {
 	const { league } = Route.useParams()
-	const { name, locationUrl, locationName, seasons } = Route.useLoaderData()
+	const { name, locationUrl, locationName, seasons, careerLeaders } =
+		Route.useLoaderData()
 
 	return (
 		<div className={css({ maxW: "5xl", mx: "auto", px: "8" })}>
@@ -116,6 +118,35 @@ function League() {
 								)),
 							)}
 					</div>
+				</SeasonSection>
+				<SeasonSection heading="Career Leaders" borderBottom={false}>
+					<div
+						className={css({
+							display: "grid",
+							gridTemplateColumns: "repeat(4, 1fr)",
+							gap: "3",
+							width: "100%",
+						})}
+					>
+						{careerLeaders.length === 0 ? (
+							<EmptySeasonCard message="No career leaders yet." />
+						) : (
+							careerLeaders.map((leader) => (
+								<LeagueLeaderCard leader={leader} key={leader.stat} />
+							))
+						)}
+					</div>
+					<Link
+						to={"/leagues/$league/stats"}
+						params={{ league }}
+						className={css({
+							color: "teal.dark",
+							fontWeight: "700",
+							_hover: { textDecoration: "underline" },
+						})}
+					>
+						View full stats for every player →
+					</Link>
 				</SeasonSection>
 			</div>
 		</div>

@@ -26,12 +26,14 @@ export function SeasonRow({ season, league }: Props) {
 			<span className={css({ fontFamily: "heading", fontWeight: "bold" })}>
 				{formatSeasonName(season)} · {formatDivision(season.division)}
 			</span>
-			<span className={css({ fontSize: "sm", color: "subtitle" })}>
-				Winner:{" "}
-				<strong className={css({ color: "purple.dark" })}>
-					Kicking Cobras
-				</strong>
-			</span>
+			{season.winner && (
+				<span className={css({ fontSize: "sm", color: "subtitle" })}>
+					Winner:{" "}
+					<strong className={css({ color: "purple.dark" })}>
+						{season.winner.name}
+					</strong>
+				</span>
+			)}
 		</Link>
 	)
 }

@@ -1,4 +1,4 @@
-import type { Season } from "../db/schema"
+import type { Season, Team } from "../db/schema"
 
 const SEASON_ORDER = ["winter", "spring", "summer", "fall"] as const
 
@@ -59,7 +59,12 @@ export function getSeasonStatus(
 
 export const ROSTER_MINIMUM = 12
 
-export type SeasonWithStatus = Season & {
+export type SeasonWinner = Pick<Team, "id" | "name">
+
+type SeasonWithWinner = Season & { winner: SeasonWinner | null }
+
+export type SeasonWithStatus = Omit<Season, "winnerId"> & {
+	winner: SeasonWinner | null
 	status: SeasonStatus
 	playerMinimum: number
 }
@@ -70,12 +75,13 @@ export interface BucketedSeasons {
 	past: SeasonWithStatus[]
 }
 
-export function bucketSeasonsByStatus(seasons: Season[]) {
+export function bucketSeasonsByStatus(seasons: SeasonWithWinner[]) {
 	const buckets: BucketedSeasons = { upcoming: [], current: [], past: [] }
 
 	for (const season of seasons) {
+		const { winnerId, ...rest } = season
 		const withStatus = {
-			...season,
+			...rest,
 			status: getSeasonStatus(season),
 			playerMinimum: ROSTER_MINIMUM,
 		}
