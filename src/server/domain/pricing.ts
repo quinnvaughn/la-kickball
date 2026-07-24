@@ -1,6 +1,6 @@
 export const PRICING = {
-	earlyBirdCents: 7000,
-	normalCents: 8000,
+	earlyBirdCents: 8000,
+	normalCents: 8500,
 	lateCents: 9500,
 	weeklySubCents: 1000,
 	weeklySubPlayoffsCents: 1500,
