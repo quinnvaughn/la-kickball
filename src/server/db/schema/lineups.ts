@@ -4,8 +4,7 @@ import { teams } from "./teams"
 import { users } from "./users"
 
 // One row per player per team per game — the batting order a captain
-// sets for that specific game. Fielding position isn't tracked here: it
-// rotates inning to inning and isn't part of a fixed lineup.
+// sets for that specific game.
 export const lineupEntries = pgTable(
 	"lineup_entries",
 	{

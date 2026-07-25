@@ -7,7 +7,7 @@ type Props = {
 	stretch?: boolean
 }
 
-export function LPSection({ heading, children, stretch = false }: Props) {
+export function SectionBlock({ heading, children, stretch = false }: Props) {
 	return (
 		<section
 			className={css({

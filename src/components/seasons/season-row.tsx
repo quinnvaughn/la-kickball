@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router"
 import { css, cx } from "styled-system/css"
 import type { SeasonWithStatus } from "#/server/domain/seasons"
 import { sharedCardStyles } from "./styles"
-import { formatDivision, formatSeasonName } from "./utils"
 
 type Props = {
 	season: SeasonWithStatus
@@ -24,7 +23,7 @@ export function SeasonRow({ season, league }: Props) {
 			)}
 		>
 			<span className={css({ fontFamily: "heading", fontWeight: "bold" })}>
-				{formatSeasonName(season)} · {formatDivision(season.division)}
+				{season.name}
 			</span>
 			{season.winner && (
 				<span className={css({ fontSize: "sm", color: "subtitle" })}>

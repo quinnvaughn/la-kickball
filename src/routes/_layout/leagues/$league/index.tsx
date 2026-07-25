@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router"
 import { css } from "styled-system/css"
 import { match } from "ts-pattern"
 import { LeagueLeaderCard } from "#/components/leagues/league-leader-card"
+import { LeagueLocationLink } from "#/components/leagues/league-location-link"
 import { EmptySeasonCard } from "#/components/seasons/empty-season-card"
 import { SeasonCard } from "#/components/seasons/season-card"
 import { SeasonRow } from "#/components/seasons/season-row"
@@ -46,12 +47,7 @@ function League() {
 				>
 					{name}
 				</h1>
-				<a
-					href={locationUrl}
-					className={css({ color: "teal.dark", textDecoration: "underline" })}
-				>
-					{locationName}
-				</a>
+				<LeagueLocationLink url={locationUrl} name={locationName} />
 				<SeasonSection heading="Current seasons">
 					<div
 						className={css({

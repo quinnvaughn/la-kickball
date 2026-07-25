@@ -8,6 +8,14 @@ export function generateSeasonSlug(
 	return `${season.season}-${season.year}-${season.division}`
 }
 
+export function formatSeasonName(
+	season: Pick<Season, "season" | "year" | "division">,
+): string {
+	const seasonLabel = season.season[0].toUpperCase() + season.season.slice(1)
+	const divisionLabel = season.division === "coed" ? "Coed" : "Men's"
+	return `${seasonLabel} ${season.year} · ${divisionLabel}`
+}
+
 function seasonRankForMonth(month: number): number {
 	return Math.floor(month / 3)
 }
@@ -67,6 +75,7 @@ export type SeasonWithStatus = Omit<Season, "winnerId"> & {
 	winner: SeasonWinner | null
 	status: SeasonStatus
 	playerMinimum: number
+	name: string
 }
 
 export interface BucketedSeasons {
@@ -84,6 +93,7 @@ export function bucketSeasonsByStatus(seasons: SeasonWithWinner[]) {
 			...rest,
 			status: getSeasonStatus(season),
 			playerMinimum: ROSTER_MINIMUM,
+			name: formatSeasonName(season),
 		}
 		buckets[withStatus.status].push(withStatus)
 	}

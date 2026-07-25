@@ -32,6 +32,8 @@ export const dayOfWeekEnum = pgEnum("day_of_week", [
 	"saturday",
 ])
 
+export type DayOfWeek = (typeof dayOfWeekEnum.enumValues)[number]
+
 export const seasons = pgTable(
 	"seasons",
 	{

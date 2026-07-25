@@ -2,17 +2,31 @@
 -- pages, schedules, box scores, career leaders, MVP awards, open-team
 -- signups, free agents) has something real to render against.
 --
--- Expects the base league + its three 2026 seasons to already exist
--- (winter-2026-coed, summer-2026-coed, fall-2026-mens under
--- cheviot-hills) — this only adds users/teams/games/stats on top.
+-- Fully self-contained: creates the "cheviot-hills" league and its four
+-- seasons itself, with every date computed relative to CURRENT_DATE, so
+-- the seasons are always in the right lifecycle stage no matter when this
+-- is run. The four seasons cover:
+--   - future:   registration open, starts ~2.5 months out
+--   - soon:     registration open, starts within the next two weeks
+--   - active:   regular season in progress (partway through its weeks)
+--   - playoffs: regular season done, semifinals played, final scheduled
+--               but not yet played
 --
--- Not meant to be re-run after editing by hand: each season block is
--- skipped if it already has teams, so running this twice in a row is
--- safe, but it won't "top up" partial data from a manually-tweaked DB.
+-- Destructive by design: this deletes any existing "cheviot-hills" league
+-- (which cascades away its seasons/teams/weeks/games/stats) and any
+-- previously seeded fake users before reseeding, so it's safe to re-run
+-- any time and always reflects "today".
 --
 -- Run with: pnpm db:seed
 
 BEGIN;
+
+CREATE OR REPLACE FUNCTION pg_temp.season_quarter_label(p_date date)
+RETURNS season_name LANGUAGE sql AS $fn$
+	SELECT (ARRAY['winter','spring','summer','fall']::season_name[])[
+		((EXTRACT(MONTH FROM p_date)::int - 1) / 3) + 1
+	];
+$fn$;
 
 CREATE OR REPLACE FUNCTION pg_temp.seed_game_logs(p_game_id uuid, p_roster uuid[])
 RETURNS void LANGUAGE plpgsql AS $fn$
@@ -76,7 +90,7 @@ CREATE OR REPLACE FUNCTION pg_temp.seed_season(
 	p_roster_size int,
 	p_total_weeks int,
 	p_completed_weeks int,
-	p_add_playoffs boolean,
+	p_add_playoffs boolean, -- true = regular season done, semis played, final scheduled but not yet played
 	p_team_names text[],
 	p_player_pool uuid[],
 	p_ref_pool uuid[]
@@ -100,16 +114,12 @@ DECLARE
 	away_score int;
 	ref_id uuid;
 	pairing_sets int[][] := ARRAY[ARRAY[1,2,3,4], ARRAY[1,3,2,4], ARRAY[1,4,2,3]];
-	pairing int[];
 	set_idx int;
 	semi1_winner uuid;
 	semi2_winner uuid;
 	semi1_id uuid;
 	semi2_id uuid;
 	final_id uuid;
-	final_winner uuid;
-	v_idx1 int;
-	v_idx2 int;
 	mvp_candidate uuid;
 BEGIN
 	SELECT * INTO v_season FROM seasons WHERE id = p_season_id;
@@ -146,7 +156,6 @@ BEGIN
 
 		IF w <= p_completed_weeks THEN
 			set_idx := ((w - 1) % 3) + 1;
-			pairing := pairing_sets[set_idx:set_idx];
 
 			FOR g IN 1..2 LOOP
 				IF g = 1 THEN
@@ -189,8 +198,22 @@ BEGIN
 		END IF;
 	END LOOP;
 
+	-- Weekly MVPs for every regular-season week that's actually happened,
+	-- independent of whether the season has playoffs yet.
+	FOR w IN 1..p_completed_weeks LOOP
+		SELECT id INTO week_id FROM weeks WHERE season_id = p_season_id AND week_number = w;
+
+		mvp_candidate := shuffled_players[1 + floor(random() * array_length(shuffled_players, 1))::int];
+		INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
+		VALUES (gen_random_uuid(), week_id, NULL, 'guy', mvp_candidate);
+
+		mvp_candidate := shuffled_players[1 + floor(random() * array_length(shuffled_players, 1))::int];
+		INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
+		VALUES (gen_random_uuid(), week_id, NULL, 'girl', mvp_candidate);
+	END LOOP;
+
 	IF p_add_playoffs THEN
-		-- Semifinals: teams[1] v teams[2], teams[3] v teams[4]
+		-- Semifinals: teams[1] v teams[2], teams[3] v teams[4] — already played.
 		week_id := gen_random_uuid();
 		week_date := COALESCE(v_season.start_date, CURRENT_DATE) + (p_total_weeks * 7);
 		INSERT INTO weeks (id, season_id, week_number, date)
@@ -222,45 +245,17 @@ BEGIN
 		PERFORM pg_temp.seed_game_logs(semi2_id, shuffled_players[(2 * p_roster_size + 1):(3 * p_roster_size)]);
 		PERFORM pg_temp.seed_game_logs(semi2_id, shuffled_players[(3 * p_roster_size + 1):(4 * p_roster_size)]);
 
-		-- Final
+		-- Final: matchup is set from the semifinal winners, but nobody's
+		-- entered a score yet — this is the "currently in playoffs" state.
 		week_id := gen_random_uuid();
 		week_date := COALESCE(v_season.start_date, CURRENT_DATE) + ((p_total_weeks + 1) * 7);
 		INSERT INTO weeks (id, season_id, week_number, date)
 		VALUES (week_id, p_season_id, p_total_weeks + 2, week_date);
 
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
-		LOOP
-			home_score := 3 + floor(random() * 13)::int;
-			away_score := 3 + floor(random() * 13)::int;
-			EXIT WHEN home_score <> away_score;
-		END LOOP;
 		final_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ref_id)
-		VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, home_score, away_score, ref_id);
-		final_winner := CASE WHEN home_score > away_score THEN semi1_winner ELSE semi2_winner END;
-
-		v_idx1 := array_position(team_ids, semi1_winner);
-		v_idx2 := array_position(team_ids, semi2_winner);
-		PERFORM pg_temp.seed_game_logs(final_id, shuffled_players[((v_idx1 - 1) * p_roster_size + 1):(v_idx1 * p_roster_size)]);
-		PERFORM pg_temp.seed_game_logs(final_id, shuffled_players[((v_idx2 - 1) * p_roster_size + 1):(v_idx2 * p_roster_size)]);
-
-		UPDATE seasons SET winner_id = final_winner WHERE id = p_season_id;
-
-		FOR w IN 1..p_completed_weeks LOOP
-			SELECT id INTO week_id FROM weeks WHERE season_id = p_season_id AND week_number = w;
-
-			mvp_candidate := shuffled_players[1 + floor(random() * array_length(shuffled_players, 1))::int];
-			INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
-			VALUES (gen_random_uuid(), week_id, NULL, 'guy', mvp_candidate);
-
-			mvp_candidate := shuffled_players[1 + floor(random() * array_length(shuffled_players, 1))::int];
-			INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
-			VALUES (gen_random_uuid(), week_id, NULL, 'girl', mvp_candidate);
-		END LOOP;
-
-		mvp_candidate := shuffled_players[1 + floor(random() * array_length(shuffled_players, 1))::int];
-		INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
-		VALUES (gen_random_uuid(), NULL, p_season_id, NULL, mvp_candidate);
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id)
+		VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, ref_id);
 	END IF;
 END;
 $fn$;
@@ -268,15 +263,25 @@ $fn$;
 DO $$
 DECLARE
 	v_league_id uuid;
-	v_winter_id uuid;
-	v_summer_id uuid;
-	v_fall_id uuid;
+	v_future_id uuid;
+	v_soon_id uuid;
+	v_active_id uuid;
+	v_playoffs_id uuid;
+
+	-- Every season's lifecycle stage is defined purely as an offset from
+	-- today, so re-running this script always reproduces the same four
+	-- stages relative to "now".
+	v_future_start date := CURRENT_DATE + 75; -- registration open, well out
+	v_soon_start date := CURRENT_DATE + 9; -- registration open, starts within 2 weeks
+	v_active_start date := CURRENT_DATE - 24; -- 3 weeks into an 8-week regular season
+	v_playoffs_start date := CURRENT_DATE - 59; -- regular season done, mid-playoffs
 
 	first_names text[] := ARRAY['Alex','Jordan','Taylor','Morgan','Casey','Riley','Jamie','Cameron','Avery','Quinn','Drew','Reese','Rowan','Skyler','Dakota','Emerson','Finley','Hayden','Kendall','Peyton'];
 	last_names text[] := ARRAY['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Wilson','Anderson','Thomas','Clark','Moore','Jackson','Martin','Lee'];
-	winter_team_names text[] := ARRAY['Sole Purpose','Kicked Out','Punt Intended','Kick-Ass Krew'];
-	summer_team_names text[] := ARRAY['The Base Invaders','Sneaker Squad','Rubber Ballers','The Diamond Divas'];
-	fall_team_names text[] := ARRAY['Turf Wars','Home Run Kickers','Cleat Street','Grass Stains'];
+	playoffs_team_names text[] := ARRAY['Sole Purpose','Kicked Out','Punt Intended','Kick-Ass Krew'];
+	active_team_names text[] := ARRAY['The Base Invaders','Sneaker Squad','Rubber Ballers','The Diamond Divas'];
+	soon_team_names text[] := ARRAY['Kick Start','Early Birds','Fresh Kicks','Warm-Up Act'];
+	future_team_names text[] := ARRAY['Turf Wars','Home Run Kickers','Cleat Street','Grass Stains'];
 
 	player_pool uuid[] := '{}';
 	ref_pool uuid[] := '{}';
@@ -284,30 +289,92 @@ DECLARE
 	i int;
 	new_user_id uuid;
 
-	fall_open_team_1 uuid;
-	fall_open_team_2 uuid;
-	summer_team uuid;
-	summer_week5_id uuid;
+	future_open_team_1 uuid;
+	future_open_team_2 uuid;
+	active_team uuid;
+	active_next_week_id uuid;
 	availability_1 uuid;
 	availability_2 uuid;
 BEGIN
-	SELECT id INTO v_league_id FROM leagues WHERE slug = 'cheviot-hills';
-	IF v_league_id IS NULL THEN
-		RAISE EXCEPTION 'Expected a "cheviot-hills" league to already exist';
-	END IF;
+	-- Wipe any previously seeded league (cascades away its seasons, teams,
+	-- weeks, games, stats, MVPs, and free-agent data) and any leftover
+	-- fake users, so this always reseeds clean relative to today.
+	DELETE FROM leagues WHERE slug = 'cheviot-hills';
+	DELETE FROM users WHERE email LIKE 'fake-player-%@example.com';
 
-	SELECT id INTO v_winter_id FROM seasons WHERE league_id = v_league_id AND slug = 'winter-2026-coed';
-	SELECT id INTO v_summer_id FROM seasons WHERE league_id = v_league_id AND slug = 'summer-2026-coed';
-	SELECT id INTO v_fall_id FROM seasons WHERE league_id = v_league_id AND slug = 'fall-2026-mens';
+	INSERT INTO leagues (id, name, slug, location_name, location_url)
+	VALUES (
+		gen_random_uuid(),
+		'Cheviot Hills',
+		'cheviot-hills',
+		'Cheviot Hills Recreation Center',
+		'https://maps.google.com/?q=Cheviot+Hills+Recreation+Center'
+	)
+	RETURNING id INTO v_league_id;
 
-	IF v_winter_id IS NULL OR v_summer_id IS NULL OR v_fall_id IS NULL THEN
-		RAISE EXCEPTION 'Expected winter/summer/fall 2026 seasons to already exist under cheviot-hills';
-	END IF;
+	INSERT INTO seasons (id, season, year, division, slug, league_id, day_of_week, start_time, end_time, start_date, weeks)
+	VALUES (
+		gen_random_uuid(),
+		pg_temp.season_quarter_label(v_future_start),
+		EXTRACT(YEAR FROM v_future_start)::smallint,
+		'mens',
+		pg_temp.season_quarter_label(v_future_start) || '-' || EXTRACT(YEAR FROM v_future_start)::int || '-mens',
+		v_league_id,
+		'sunday',
+		'13:00',
+		'15:00',
+		v_future_start,
+		8
+	)
+	RETURNING id INTO v_future_id;
 
-	IF EXISTS (SELECT 1 FROM teams WHERE season_id IN (v_winter_id, v_summer_id, v_fall_id)) THEN
-		RAISE NOTICE 'Seed already applied to these seasons — skipping';
-		RETURN;
-	END IF;
+	INSERT INTO seasons (id, season, year, division, slug, league_id, day_of_week, start_time, end_time, start_date, weeks)
+	VALUES (
+		gen_random_uuid(),
+		pg_temp.season_quarter_label(v_soon_start),
+		EXTRACT(YEAR FROM v_soon_start)::smallint,
+		'mens',
+		pg_temp.season_quarter_label(v_soon_start) || '-' || EXTRACT(YEAR FROM v_soon_start)::int || '-mens',
+		v_league_id,
+		'wednesday',
+		'18:30',
+		'20:30',
+		v_soon_start,
+		8
+	)
+	RETURNING id INTO v_soon_id;
+
+	INSERT INTO seasons (id, season, year, division, slug, league_id, day_of_week, start_time, end_time, start_date, weeks)
+	VALUES (
+		gen_random_uuid(),
+		pg_temp.season_quarter_label(v_active_start),
+		EXTRACT(YEAR FROM v_active_start)::smallint,
+		'coed',
+		pg_temp.season_quarter_label(v_active_start) || '-' || EXTRACT(YEAR FROM v_active_start)::int || '-coed',
+		v_league_id,
+		'saturday',
+		'10:00',
+		'12:00',
+		v_active_start,
+		8
+	)
+	RETURNING id INTO v_active_id;
+
+	INSERT INTO seasons (id, season, year, division, slug, league_id, day_of_week, start_time, end_time, start_date, weeks)
+	VALUES (
+		gen_random_uuid(),
+		pg_temp.season_quarter_label(v_playoffs_start),
+		EXTRACT(YEAR FROM v_playoffs_start)::smallint,
+		'coed',
+		pg_temp.season_quarter_label(v_playoffs_start) || '-' || EXTRACT(YEAR FROM v_playoffs_start)::int || '-coed',
+		v_league_id,
+		'saturday',
+		'10:00',
+		'12:00',
+		v_playoffs_start,
+		8
+	)
+	RETURNING id INTO v_playoffs_id;
 
 	-- 56 players + 6 referees. password_hash is a placeholder, not a
 	-- real argon2 hash — these fake accounts are for display only and
@@ -332,43 +399,43 @@ BEGIN
 		END IF;
 	END LOOP;
 
-	-- Winter: fully played out, including playoffs, MVP awards, and a
-	-- season winner — this is what makes the career-leaders query
-	-- return real data.
-	PERFORM pg_temp.seed_season(v_winter_id, 4, 10, 8, 8, true, winter_team_names, player_pool, ref_pool);
+	-- Future: registration open, rosters formed, nothing scheduled yet.
+	PERFORM pg_temp.seed_season(v_future_id, 4, 10, 8, 0, false, future_team_names, player_pool, ref_pool);
 
-	-- Summer: in progress — weeks 1-4 played (today is partway through
-	-- week 4), weeks 5-8 still upcoming.
-	PERFORM pg_temp.seed_season(v_summer_id, 4, 10, 8, 4, false, summer_team_names, player_pool, ref_pool);
+	-- Starting soon: registration open, kicks off within the next two weeks.
+	PERFORM pg_temp.seed_season(v_soon_id, 4, 10, 8, 0, false, soon_team_names, player_pool, ref_pool);
 
-	-- Fall: rosters formed, nothing scheduled yet (season hasn't started).
-	PERFORM pg_temp.seed_season(v_fall_id, 4, 10, 0, 0, false, fall_team_names, player_pool, ref_pool);
+	-- Active: partway through an 8-week regular season (3 weeks played).
+	PERFORM pg_temp.seed_season(v_active_id, 4, 10, 8, 3, false, active_team_names, player_pool, ref_pool);
 
-	-- A couple of open fall teams + join requests, so the "still
-	-- recruiting" team state has something to look at.
-	SELECT id INTO fall_open_team_1 FROM teams WHERE season_id = v_fall_id ORDER BY name LIMIT 1;
-	SELECT id INTO fall_open_team_2 FROM teams WHERE season_id = v_fall_id ORDER BY name OFFSET 1 LIMIT 1;
+	-- Playoffs: regular season complete, semifinals played, final scheduled.
+	PERFORM pg_temp.seed_season(v_playoffs_id, 4, 10, 8, 8, true, playoffs_team_names, player_pool, ref_pool);
 
-	UPDATE teams SET is_open = true, invite_code = upper(substr(md5(random()::text), 1, 6)) WHERE id = fall_open_team_1;
-	UPDATE teams SET is_open = true, invite_code = upper(substr(md5(random()::text), 1, 6)) WHERE id = fall_open_team_2;
+	-- A couple of open teams on the future season + join requests, so the
+	-- "still recruiting" team state has something to look at.
+	SELECT id INTO future_open_team_1 FROM teams WHERE season_id = v_future_id ORDER BY name LIMIT 1;
+	SELECT id INTO future_open_team_2 FROM teams WHERE season_id = v_future_id ORDER BY name OFFSET 1 LIMIT 1;
+
+	UPDATE teams SET is_open = true, invite_code = upper(substr(md5(random()::text), 1, 6)) WHERE id = future_open_team_1;
+	UPDATE teams SET is_open = true, invite_code = upper(substr(md5(random()::text), 1, 6)) WHERE id = future_open_team_2;
 
 	INSERT INTO team_join_requests (id, team_id, player_id, accepted_at)
-	VALUES (gen_random_uuid(), fall_open_team_1, player_pool[1], now());
+	VALUES (gen_random_uuid(), future_open_team_1, player_pool[1], now());
 	INSERT INTO team_join_requests (id, team_id, player_id, accepted_at)
-	VALUES (gen_random_uuid(), fall_open_team_2, player_pool[2], NULL);
+	VALUES (gen_random_uuid(), future_open_team_2, player_pool[2], NULL);
 
-	-- A couple of free agents open for an upcoming summer week, one
-	-- with a pending invite from a team.
-	SELECT id INTO summer_week5_id FROM weeks WHERE season_id = v_summer_id AND week_number = 5;
-	SELECT id INTO summer_team FROM teams WHERE season_id = v_summer_id ORDER BY name LIMIT 1;
+	-- A couple of free agents open for the active season's next upcoming
+	-- week, one with a pending invite from a team.
+	SELECT id INTO active_next_week_id FROM weeks WHERE season_id = v_active_id AND week_number = 4;
+	SELECT id INTO active_team FROM teams WHERE season_id = v_active_id ORDER BY name LIMIT 1;
 
 	availability_1 := gen_random_uuid();
-	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (availability_1, player_pool[3], summer_week5_id);
+	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (availability_1, player_pool[3], active_next_week_id);
 	availability_2 := gen_random_uuid();
-	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (availability_2, player_pool[4], summer_week5_id);
+	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (availability_2, player_pool[4], active_next_week_id);
 
 	INSERT INTO free_agent_invites (id, team_id, availability_id, accepted_at)
-	VALUES (gen_random_uuid(), summer_team, availability_1, NULL);
+	VALUES (gen_random_uuid(), active_team, availability_1, NULL);
 END;
 $$;
 

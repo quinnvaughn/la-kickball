@@ -4,7 +4,7 @@ import { css, cx } from "styled-system/css"
 import { VStack } from "styled-system/jsx"
 import type { RouterOutputs } from "#/server/router"
 import { sharedCardStyles } from "./styles"
-import { formatSeasonName, toCapitalize } from "./utils"
+import { formatTimeRange, toCapitalize } from "./utils"
 
 type LeagueOutput = RouterOutputs["leagues"]["league"]
 type Season = LeagueOutput["seasons"]["current"][number]
@@ -23,11 +23,6 @@ const tagStyles = css({
 	py: "1",
 	px: "2",
 	borderRadius: "full",
-})
-
-const divisionStyles = css({
-	color: "teal.dark",
-	backgroundColor: "rgba(0,169,157,0.12)",
 })
 
 const statusStyles = css({
@@ -51,24 +46,6 @@ function getSeasonStatus(
 	return "League Completed"
 }
 
-function formatHour(dt: DateTime) {
-	return dt.minute === 0 ? dt.toFormat("h") : dt.toFormat("h:mm")
-}
-
-function formatTimeRange(startTime: string, endTime: string) {
-	const start = DateTime.fromFormat(startTime, "HH:mm:ss")
-	const end = DateTime.fromFormat(endTime, "HH:mm:ss")
-
-	const startMeridiem = start.toFormat("a").toLowerCase()
-	const endMeridiem = end.toFormat("a").toLowerCase()
-
-	const startLabel =
-		formatHour(start) + (startMeridiem === endMeridiem ? "" : startMeridiem)
-	const endLabel = formatHour(end) + endMeridiem
-
-	return `${startLabel}-${endLabel}`
-}
-
 export function SeasonCard({ season, league }: Props) {
 	return (
 		<Link
@@ -77,16 +54,11 @@ export function SeasonCard({ season, league }: Props) {
 			className={sharedCardStyles}
 		>
 			<VStack gap="3" alignItems="start">
-				<div className={css({ display: "flex", gap: "1.5" })}>
-					<span className={cx(tagStyles, divisionStyles)}>
-						{season.division === "mens" ? "Men's" : "Co-ed"}
-					</span>
-					<span className={cx(tagStyles, statusStyles)}>
-						{season.startDate
-							? getSeasonStatus(season.startDate, season.weeks)
-							: "Registration Open"}
-					</span>
-				</div>
+				<span className={cx(tagStyles, statusStyles)}>
+					{season.startDate
+						? getSeasonStatus(season.startDate, season.weeks)
+						: "Registration Open"}
+				</span>
 				<VStack gap="2" alignItems="start">
 					<div
 						className={css({
@@ -95,7 +67,7 @@ export function SeasonCard({ season, league }: Props) {
 							fontSize: "xl",
 						})}
 					>
-						{formatSeasonName(season)}
+						{season.name}
 					</div>
 					<div
 						className={css({

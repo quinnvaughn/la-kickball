@@ -5,7 +5,7 @@ import { db } from "../db"
 import { isUniqueConstraintError } from "../db/errors"
 import { gameLogs, games, leagues, seasons, users, weeks } from "../db/schema"
 import { slugify } from "../domain/leagues"
-import { bucketSeasonsByStatus } from "../domain/seasons"
+import { bucketSeasonsByStatus, formatSeasonName } from "../domain/seasons"
 import {
 	CAREER_STAT_FIELD_KEYS,
 	type CareerStatsRow,
@@ -103,6 +103,35 @@ export const leaguesRouter = router({
 				seasons: bucketSeasonsByStatus(league.seasons),
 				careerLeaders: buildCareerLeaders(totals.map(computeCareerStats)),
 			}
+		}),
+
+	season: publicProcedure
+		.input(z.object({ leagueSlug: z.string(), seasonSlug: z.string() }))
+		.query(async ({ input }) => {
+			const league = await db.query.leagues.findFirst({
+				where: { slug: { eq: input.leagueSlug } },
+			})
+
+			if (!league) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "League not found" })
+			}
+
+			const season = await db.query.seasons.findFirst({
+				where: {
+					leagueId: { eq: league.id },
+					slug: { eq: input.seasonSlug },
+				},
+				with: {
+					winner: true,
+					teams: true,
+				},
+			})
+
+			if (!season) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Season not found" })
+			}
+
+			return { ...season, name: formatSeasonName(season), league }
 		}),
 
 	careerStats: publicProcedure
