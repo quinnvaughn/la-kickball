@@ -2,15 +2,16 @@
 -- pages, schedules, box scores, career leaders, MVP awards, open-team
 -- signups, free agents) has something real to render against.
 --
--- Fully self-contained: creates the "cheviot-hills" league and its four
+-- Fully self-contained: creates the "cheviot-hills" league and its five
 -- seasons itself, with every date computed relative to CURRENT_DATE, so
 -- the seasons are always in the right lifecycle stage no matter when this
--- is run. The four seasons cover:
---   - future:   registration open, starts ~2.5 months out
---   - soon:     registration open, starts within the next two weeks
---   - active:   regular season in progress (partway through its weeks)
---   - playoffs: regular season done, semifinals played, final scheduled
---               but not yet played
+-- is run. The five seasons cover:
+--   - future:    registration open, starts ~2.5 months out
+--   - soon:      registration open, starts within the next two weeks
+--   - active:    regular season in progress (partway through its weeks)
+--   - playoffs:  regular season done, semifinals played, final scheduled
+--                but not yet played
+--   - completed: entire season finished, final played, winner recorded
 --
 -- Destructive by design: this deletes any existing "cheviot-hills" league
 -- (which cascades away its seasons/teams/weeks/games/stats) and any
@@ -91,6 +92,7 @@ CREATE OR REPLACE FUNCTION pg_temp.seed_season(
 	p_total_weeks int,
 	p_completed_weeks int,
 	p_add_playoffs boolean, -- true = regular season done, semis played, final scheduled but not yet played
+	p_final_played boolean, -- true = final has also been played and the season winner recorded
 	p_team_names text[],
 	p_player_pool uuid[],
 	p_ref_pool uuid[]
@@ -117,9 +119,12 @@ DECLARE
 	set_idx int;
 	semi1_winner uuid;
 	semi2_winner uuid;
+	semi1_winner_idx int;
+	semi2_winner_idx int;
 	semi1_id uuid;
 	semi2_id uuid;
 	final_id uuid;
+	final_winner uuid;
 	mvp_candidate uuid;
 BEGIN
 	SELECT * INTO v_season FROM seasons WHERE id = p_season_id;
@@ -228,7 +233,8 @@ BEGIN
 		semi1_id := gen_random_uuid();
 		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ref_id)
 		VALUES (semi1_id, week_id, team_ids[1], team_ids[2], 'semifinal', 'Field 1', v_season.start_time, home_score, away_score, ref_id);
-		semi1_winner := CASE WHEN home_score > away_score THEN team_ids[1] ELSE team_ids[2] END;
+		semi1_winner_idx := CASE WHEN home_score > away_score THEN 1 ELSE 2 END;
+		semi1_winner := team_ids[semi1_winner_idx];
 		PERFORM pg_temp.seed_game_logs(semi1_id, shuffled_players[1:p_roster_size]);
 		PERFORM pg_temp.seed_game_logs(semi1_id, shuffled_players[(p_roster_size + 1):(2 * p_roster_size)]);
 
@@ -241,12 +247,14 @@ BEGIN
 		semi2_id := gen_random_uuid();
 		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ref_id)
 		VALUES (semi2_id, week_id, team_ids[3], team_ids[4], 'semifinal', 'Field 2', v_season.start_time, home_score, away_score, ref_id);
-		semi2_winner := CASE WHEN home_score > away_score THEN team_ids[3] ELSE team_ids[4] END;
+		semi2_winner_idx := CASE WHEN home_score > away_score THEN 3 ELSE 4 END;
+		semi2_winner := team_ids[semi2_winner_idx];
 		PERFORM pg_temp.seed_game_logs(semi2_id, shuffled_players[(2 * p_roster_size + 1):(3 * p_roster_size)]);
 		PERFORM pg_temp.seed_game_logs(semi2_id, shuffled_players[(3 * p_roster_size + 1):(4 * p_roster_size)]);
 
-		-- Final: matchup is set from the semifinal winners, but nobody's
-		-- entered a score yet — this is the "currently in playoffs" state.
+		-- Final: matchup is set from the semifinal winners. If the final
+		-- hasn't been played yet, nobody's entered a score — this is the
+		-- "currently in playoffs" state.
 		week_id := gen_random_uuid();
 		week_date := COALESCE(v_season.start_date, CURRENT_DATE) + ((p_total_weeks + 1) * 7);
 		INSERT INTO weeks (id, season_id, week_number, date)
@@ -254,8 +262,32 @@ BEGIN
 
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
 		final_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id)
-		VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, ref_id);
+
+		IF p_final_played THEN
+			LOOP
+				home_score := 3 + floor(random() * 13)::int;
+				away_score := 3 + floor(random() * 13)::int;
+				EXIT WHEN home_score <> away_score;
+			END LOOP;
+
+			INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ref_id)
+			VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, home_score, away_score, ref_id);
+
+			final_winner := CASE WHEN home_score > away_score THEN semi1_winner ELSE semi2_winner END;
+			PERFORM pg_temp.seed_game_logs(
+				final_id,
+				shuffled_players[((semi1_winner_idx - 1) * p_roster_size + 1):(semi1_winner_idx * p_roster_size)]
+			);
+			PERFORM pg_temp.seed_game_logs(
+				final_id,
+				shuffled_players[((semi2_winner_idx - 1) * p_roster_size + 1):(semi2_winner_idx * p_roster_size)]
+			);
+
+			UPDATE seasons SET winner_id = final_winner WHERE id = p_season_id;
+		ELSE
+			INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id)
+			VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, ref_id);
+		END IF;
 	END IF;
 END;
 $fn$;
@@ -267,14 +299,16 @@ DECLARE
 	v_soon_id uuid;
 	v_active_id uuid;
 	v_playoffs_id uuid;
+	v_completed_id uuid;
 
 	-- Every season's lifecycle stage is defined purely as an offset from
-	-- today, so re-running this script always reproduces the same four
+	-- today, so re-running this script always reproduces the same five
 	-- stages relative to "now".
 	v_future_start date := CURRENT_DATE + 75; -- registration open, well out
 	v_soon_start date := CURRENT_DATE + 9; -- registration open, starts within 2 weeks
 	v_active_start date := CURRENT_DATE - 24; -- 3 weeks into an 8-week regular season
 	v_playoffs_start date := CURRENT_DATE - 59; -- regular season done, mid-playoffs
+	v_completed_start date := CURRENT_DATE - 120; -- entire season + playoffs long finished
 
 	first_names text[] := ARRAY['Alex','Jordan','Taylor','Morgan','Casey','Riley','Jamie','Cameron','Avery','Quinn','Drew','Reese','Rowan','Skyler','Dakota','Emerson','Finley','Hayden','Kendall','Peyton'];
 	last_names text[] := ARRAY['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Wilson','Anderson','Thomas','Clark','Moore','Jackson','Martin','Lee'];
@@ -282,6 +316,7 @@ DECLARE
 	active_team_names text[] := ARRAY['The Base Invaders','Sneaker Squad','Rubber Ballers','The Diamond Divas'];
 	soon_team_names text[] := ARRAY['Kick Start','Early Birds','Fresh Kicks','Warm-Up Act'];
 	future_team_names text[] := ARRAY['Turf Wars','Home Run Kickers','Cleat Street','Grass Stains'];
+	completed_team_names text[] := ARRAY['Kickin'' Chicken','Foul Balls','The Kick-Offs','Ball Busters'];
 
 	player_pool uuid[] := '{}';
 	ref_pool uuid[] := '{}';
@@ -376,6 +411,22 @@ BEGIN
 	)
 	RETURNING id INTO v_playoffs_id;
 
+	INSERT INTO seasons (id, season, year, division, slug, league_id, day_of_week, start_time, end_time, start_date, weeks)
+	VALUES (
+		gen_random_uuid(),
+		pg_temp.season_quarter_label(v_completed_start),
+		EXTRACT(YEAR FROM v_completed_start)::smallint,
+		'mens',
+		pg_temp.season_quarter_label(v_completed_start) || '-' || EXTRACT(YEAR FROM v_completed_start)::int || '-mens',
+		v_league_id,
+		'sunday',
+		'13:00',
+		'15:00',
+		v_completed_start,
+		8
+	)
+	RETURNING id INTO v_completed_id;
+
 	-- 56 players + 6 referees. password_hash is a placeholder, not a
 	-- real argon2 hash — these fake accounts are for display only and
 	-- can't log in through the app.
@@ -400,16 +451,19 @@ BEGIN
 	END LOOP;
 
 	-- Future: registration open, rosters formed, nothing scheduled yet.
-	PERFORM pg_temp.seed_season(v_future_id, 4, 10, 8, 0, false, future_team_names, player_pool, ref_pool);
+	PERFORM pg_temp.seed_season(v_future_id, 4, 10, 8, 0, false, false, future_team_names, player_pool, ref_pool);
 
 	-- Starting soon: registration open, kicks off within the next two weeks.
-	PERFORM pg_temp.seed_season(v_soon_id, 4, 10, 8, 0, false, soon_team_names, player_pool, ref_pool);
+	PERFORM pg_temp.seed_season(v_soon_id, 4, 10, 8, 0, false, false, soon_team_names, player_pool, ref_pool);
 
 	-- Active: partway through an 8-week regular season (3 weeks played).
-	PERFORM pg_temp.seed_season(v_active_id, 4, 10, 8, 3, false, active_team_names, player_pool, ref_pool);
+	PERFORM pg_temp.seed_season(v_active_id, 4, 10, 8, 3, false, false, active_team_names, player_pool, ref_pool);
 
-	-- Playoffs: regular season complete, semifinals played, final scheduled.
-	PERFORM pg_temp.seed_season(v_playoffs_id, 4, 10, 8, 8, true, playoffs_team_names, player_pool, ref_pool);
+	-- Playoffs: regular season complete, semifinals played, final scheduled but not played.
+	PERFORM pg_temp.seed_season(v_playoffs_id, 4, 10, 8, 8, true, false, playoffs_team_names, player_pool, ref_pool);
+
+	-- Completed: entire season including the final has been played, winner recorded.
+	PERFORM pg_temp.seed_season(v_completed_id, 4, 10, 8, 8, true, true, completed_team_names, player_pool, ref_pool);
 
 	-- A couple of open teams on the future season + join requests, so the
 	-- "still recruiting" team state has something to look at.

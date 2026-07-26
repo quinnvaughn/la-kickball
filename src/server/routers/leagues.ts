@@ -5,11 +5,12 @@ import { db } from "../db"
 import { isUniqueConstraintError } from "../db/errors"
 import { gameLogs, games, leagues, seasons, users, weeks } from "../db/schema"
 import { slugify } from "../domain/leagues"
+import { isUserRegisteredForSeason } from "../domain/registration"
 import { bucketSeasonsByStatus, formatSeasonName } from "../domain/seasons"
 import {
+	buildCareerLeaders,
 	CAREER_STAT_FIELD_KEYS,
 	type CareerStatsRow,
-	buildCareerLeaders,
 	computeCareerStats,
 	paginateCareerStats,
 	sortCareerStats,
@@ -107,7 +108,7 @@ export const leaguesRouter = router({
 
 	season: publicProcedure
 		.input(z.object({ leagueSlug: z.string(), seasonSlug: z.string() }))
-		.query(async ({ input }) => {
+		.query(async ({ input, ctx }) => {
 			const league = await db.query.leagues.findFirst({
 				where: { slug: { eq: input.leagueSlug } },
 			})
@@ -131,7 +132,16 @@ export const leaguesRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Season not found" })
 			}
 
-			return { ...season, name: formatSeasonName(season), league }
+			const isRegistered = ctx.user
+				? await isUserRegisteredForSeason(ctx.user.id, season.id)
+				: false
+
+			return {
+				...season,
+				name: formatSeasonName(season),
+				league,
+				isRegistered,
+			}
 		}),
 
 	careerStats: publicProcedure

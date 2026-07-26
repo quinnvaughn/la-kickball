@@ -1,15 +1,19 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router"
 import { routeTree } from "./routeTree.gen"
-import { trpc } from "./server/client"
+import { createTrpc, trpc } from "./server/client"
+import { getRequestCookieHeader } from "./server/request-cookie"
 
-export function getRouter() {
+export async function getRouter() {
+	const cookie =
+		typeof window === "undefined" ? await getRequestCookieHeader() : null
+
 	const router = createTanStackRouter({
 		routeTree,
 		scrollRestoration: true,
 		defaultPreload: "intent",
 		defaultPreloadStaleTime: 0,
 		context: {
-			trpc,
+			trpc: cookie ? createTrpc(cookie) : trpc,
 		},
 	})
 
@@ -18,6 +22,6 @@ export function getRouter() {
 
 declare module "@tanstack/react-router" {
 	interface Register {
-		router: ReturnType<typeof getRouter>
+		router: Awaited<ReturnType<typeof getRouter>>
 	}
 }

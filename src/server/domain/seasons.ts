@@ -1,4 +1,5 @@
 import type { Season, Team } from "../db/schema"
+import { PRICING } from "./pricing"
 
 const SEASON_ORDER = ["winter", "spring", "summer", "fall"] as const
 
@@ -54,11 +55,19 @@ export function getSeasonStatus(
 ): SeasonStatus {
 	if (season.startDate) {
 		const start = new Date(season.startDate)
+		const soonCutoff = new Date(start)
+		soonCutoff.setDate(
+			soonCutoff.getDate() - PRICING.normalStartsDaysBeforeKickoff,
+		)
+		if (now < soonCutoff) return "upcoming"
+
 		const end = new Date(start)
 		end.setDate(end.getDate() + season.weeks * 7 + 14)
-		if (now > end) return "past"
+		return now > end ? "past" : "current"
 	}
 
+	// No startDate yet: fall back to comparing the season's named quarter
+	// (e.g. "spring") against the current calendar quarter.
 	const cmp = compareTuples(tupleForSeason(season, now), currentTuple(now))
 	if (cmp > 0) return "upcoming"
 	if (cmp < 0) return "past"

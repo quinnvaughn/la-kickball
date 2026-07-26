@@ -1,8 +1,9 @@
 import { Link } from "@tanstack/react-router"
 import { DateTime } from "luxon"
-import { css, cx } from "styled-system/css"
+import { css } from "styled-system/css"
 import { VStack } from "styled-system/jsx"
 import type { RouterOutputs } from "#/server/router"
+import { Badge } from "../ui/badge"
 import { sharedCardStyles } from "./styles"
 import { formatTimeRange, toCapitalize } from "./utils"
 
@@ -14,35 +15,21 @@ type Props = {
 	league: string
 }
 
-const tagStyles = css({
-	display: "inline-block",
-	fontFamily: "label",
-	fontSize: "xs",
-	textTransform: "uppercase",
-	letterSpacing: "wider",
-	py: "1",
-	px: "2",
-	borderRadius: "full",
-})
-
-const statusStyles = css({
-	color: "gold.dark",
-	background: "rgba(255,182,39,0.15)",
-})
-
 function getSeasonStatus(
 	startDate: string,
 	numWeeks: number,
 	now = DateTime.now(),
 ) {
 	const newDate = DateTime.fromISO(startDate)
+	const endOfRegularSeason = newDate.plus({ weeks: numWeeks })
 	const endOfPlayoffs = newDate
 		.plus({ weeks: numWeeks + 2 })
 		.plus({ days: 1 })
 		.startOf("day")
 
 	if (now < newDate) return "Registration Open"
-	if (now < endOfPlayoffs) return "In Progress"
+	if (now < endOfRegularSeason) return "In Progress"
+	if (now < endOfPlayoffs) return "Playoffs"
 	return "League Completed"
 }
 
@@ -54,11 +41,13 @@ export function SeasonCard({ season, league }: Props) {
 			className={sharedCardStyles}
 		>
 			<VStack gap="3" alignItems="start">
-				<span className={cx(tagStyles, statusStyles)}>
-					{season.startDate
-						? getSeasonStatus(season.startDate, season.weeks)
-						: "Registration Open"}
-				</span>
+				<Badge
+					text={
+						season.startDate
+							? getSeasonStatus(season.startDate, season.weeks)
+							: "Registration Open"
+					}
+				/>
 				<VStack gap="2" alignItems="start">
 					<div
 						className={css({

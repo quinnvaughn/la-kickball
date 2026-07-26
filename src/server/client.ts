@@ -7,11 +7,16 @@ const url =
 		? `http://localhost:${process.env.PORT ?? 3000}/api/trpc`
 		: "/api/trpc"
 
-export const trpc = createTRPCProxyClient<AppRouter>({
-	links: [
-		httpBatchLink({
-			url,
-			transformer: superjson,
-		}),
-	],
-})
+export function createTrpc(cookie?: string | null) {
+	return createTRPCProxyClient<AppRouter>({
+		links: [
+			httpBatchLink({
+				url,
+				transformer: superjson,
+				headers: cookie ? { cookie } : undefined,
+			}),
+		],
+	})
+}
+
+export const trpc = createTrpc()
