@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router"
 import { css } from "styled-system/css"
 import { type CareerLeader, isRateCategory } from "#/server/domain/stats"
+import { formatUsersName } from "../user/utils"
 
 type Props = {
 	leader: CareerLeader
@@ -54,7 +55,7 @@ export function LeagueLeaderCard({ leader }: Props) {
 					},
 				})}
 			>
-				{leader.firstName} {leader.lastName[0]}.
+				{formatUsersName(leader)}
 			</Link>
 			<span
 				className={css({

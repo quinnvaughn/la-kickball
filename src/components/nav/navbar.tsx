@@ -1,134 +1,139 @@
+import { Link, useLoaderData, useRouter } from "@tanstack/react-router"
 import { useState } from "react"
-import { css } from "styled-system/css"
-import { HStack } from "styled-system/jsx"
-import z from "zod"
-import { useForm } from "#/lib/form"
-import { Modal } from "../ui/modal"
-import { TextField } from "../ui/textfield"
+import { TiArrowSortedDown, TiArrowSortedUp } from "react-icons/ti"
+import { css, cx } from "styled-system/css"
+import { openModal } from "#/lib/modal"
+import { trpc } from "#/server/client"
+import { formatUserAvatar, formatUsersName } from "../user/utils"
+import { AuthModal } from "./auth-modal"
 import { Logo } from "./logo"
-import { NavLink } from "./nav-link"
 import { container } from "./nav-styling"
 
-type Page = "signup" | "login"
-
-const loginSchema = z.object({
-	mode: z.literal("login"),
-	email: z.email(),
-	password: z.string().min(1, "Password is required."),
+const authButtonStyles = css({
+	background: { base: "coral", _hover: "coral.dark" },
+	color: "sand",
+	fontWeight: "bold",
+	py: "2",
+	px: "5",
+	borderRadius: "full",
+	fontSize: "sm",
+	textDecoration: "none",
+	cursor: "pointer",
+	whiteSpace: "nowrap",
+	border: "none",
 })
 
-const signupSchema = loginSchema.extend({
-	mode: z.literal("signup"),
-	firstName: z
-		.string()
-		.min(1, "First name is required")
-		.max(60, "First name must not be more than 60 characters."),
-	lastName: z
-		.string()
-		.min(1, "Last name is required")
-		.max(60, "Last name must not be more than 60 characters."),
-	phone: z
-		.string()
-		.min(1, "Phone number is required")
-		.max(20, "Phone number must not be more than 20 characters."),
-	password: z.string().min(8, "Password must be at least 8 characters."),
+const menuLinkStyles = css({
+	display: "block",
+	width: "100%",
+	textAlign: "left",
+	py: "2",
+	px: "3",
+	borderRadius: "lg",
+	fontWeight: "600",
+	fontSize: "sm",
+	cursor: "pointer",
+	_hover: { background: "rgba(27,42,74,0.06)" },
 })
-
-const authSchema = z.discriminatedUnion("mode", [loginSchema, signupSchema])
 
 export function Navbar() {
-	const [isAuthOpen, setIsAuthOpen] = useState(false)
+	const user = useLoaderData({ from: "/_layout" })
+	const router = useRouter()
+	const [isOpen, setIsOpen] = useState(false)
 
-	const form = useForm({
-		schema: authSchema,
-		defaultValues: {
-			mode: "signup",
-			email: "",
-			password: "",
-			firstName: "",
-			lastName: "",
-			phone: "",
-		},
-	})
-
-	function headerText(page: Page) {
-		return page === "signup"
-			? { title: "Create your account", subtitle: "" }
-			: { title: "Log in", subtitle: "Welcome back" }
-	}
-
-	function footerText(page: Page) {
-		return page === "signup"
-			? { prompt: "Already have an account?", link: "Log in" }
-			: { prompt: "Need an account?", link: "Sign up" }
+	const handleLogout = async () => {
+		setIsOpen(false)
+		await trpc.auth.logout.mutate()
+		await router.invalidate()
 	}
 
 	return (
-		<>
-			<nav className={container}>
-				<Logo />
-				<HStack gap="3">
-					<NavLink to="/rules">Rules</NavLink>
+		<nav className={container}>
+			<Logo />
+			{user ? (
+				<div className={css({ position: "relative" })}>
 					<button
 						type="button"
 						className={css({
-							background: { base: "coral", _hover: "coral.dark" },
-							color: "sand",
-							fontWeight: "bold",
-							py: "2",
-							px: "5",
-							borderRadius: "full",
+							display: "flex",
+							alignItems: "center",
+							gap: "2",
+							fontWeight: "700",
 							fontSize: "sm",
-							textDecoration: "none",
+							color: "#fff",
 							cursor: "pointer",
-							whiteSpace: "nowrap",
 						})}
-						onClick={() => setIsAuthOpen(true)}
+						onClick={() => setIsOpen((prev) => !prev)}
 					>
-						Sign up
+						<span
+							className={css({
+								width: "8",
+								height: "8",
+								borderRadius: "50%",
+								background: "gold",
+								color: "ink",
+								display: "flex",
+								alignItems: "center",
+								justifyContent: "center",
+								flexShrink: 0,
+								fontFamily: "heading",
+								fontWeight: "extrabold",
+								fontSize: "xs",
+							})}
+						>
+							{formatUserAvatar(user)}
+						</span>
+						{formatUsersName(user)}
+						<span
+							className={css({
+								color: "rgba(255,246,237,0.6)",
+								fontSize: "xs",
+							})}
+						>
+							{isOpen ? <TiArrowSortedUp /> : <TiArrowSortedDown />}
+						</span>
 					</button>
-				</HStack>
-			</nav>
-			<form.Subscribe selector={(s) => s.values.mode}>
-				{(mode) => (
-					<Modal open={isAuthOpen} onClose={() => setIsAuthOpen(false)}>
-						<Modal.Header>
-							<Modal.Title>{headerText(mode).title}</Modal.Title>
-							<Modal.Subtitle>{headerText(mode).subtitle}</Modal.Subtitle>
-						</Modal.Header>
-						<Modal.Body>
-							<form.Field name="firstName">
-								{(field) => (
-									<TextField {...field} error={field.meta.error}>
-										<TextField.Label>First name</TextField.Label>
-										<TextField.Input />
-										<TextField.Error />
-									</TextField>
-								)}
-							</form.Field>
-						</Modal.Body>
-						<Modal.Footer>
-							<Modal.SubmitButton>
-								{mode === "signup" ? "Sign up" : "Log in"}
-							</Modal.SubmitButton>
-							<HStack gap="1" justify={"center"}>
-								<Modal.SwitchPrompt>
-									{footerText(mode).prompt}
-								</Modal.SwitchPrompt>
-								<Modal.SwitchLink
-									onClick={() =>
-										form.setValue("mode", (prev) =>
-											prev === "signup" ? "login" : "signup",
-										)
-									}
-								>
-									{footerText(mode).link}
-								</Modal.SwitchLink>
-							</HStack>
-						</Modal.Footer>
-					</Modal>
-				)}
-			</form.Subscribe>
-		</>
+					<div
+						className={css({
+							position: "absolute",
+							top: "calc(100% + 0.6rem)",
+							right: 0,
+							minWidth: "11rem",
+							background: "sand",
+							borderRadius: "xl",
+							padding: "2",
+							boxShadow: "0 12px 30px rgba(27,42,74,0.3)",
+							display: isOpen ? "flex" : "none",
+							zIndex: 90,
+							flexDirection: "column",
+						})}
+					>
+						<Link
+							to={"/user/$userId"}
+							params={{ userId: user.id }}
+							className={menuLinkStyles}
+							onClick={() => setIsOpen(false)}
+						>
+							My account
+						</Link>
+						<button
+							type="button"
+							onClick={handleLogout}
+							className={cx(menuLinkStyles, css({ color: "coral.dark" }))}
+						>
+							Sign out
+						</button>
+					</div>
+				</div>
+			) : (
+				<button
+					type="button"
+					className={authButtonStyles}
+					onClick={() => openModal(<AuthModal />)}
+				>
+					Sign up
+				</button>
+			)}
+		</nav>
 	)
 }

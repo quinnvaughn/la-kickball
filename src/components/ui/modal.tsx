@@ -42,8 +42,7 @@ const headerStyles = css({
 const titleStyles = css({
 	fontFamily: "heading",
 	fontWeight: "extrabold",
-	fontSize: "xl",
-	margin: "0",
+	fontSize: "2xl",
 	color: "purple.dark",
 })
 
@@ -75,6 +74,11 @@ const submitStyles = css({
 	border: "none",
 	cursor: "pointer",
 	_hover: { background: "coral.dark" },
+	_disabled: {
+		cursor: "not-allowed",
+		opacity: "0.5",
+		_hover: { background: "coral" },
+	},
 })
 
 const switchRowStyles = css({
@@ -156,9 +160,15 @@ function Footer({ children }: { children: ReactNode }) {
 	return <div className={footerStyles}>{children}</div>
 }
 
-function SubmitButton({ children }: { children: ReactNode }) {
+function SubmitButton({
+	children,
+	disabled,
+}: {
+	children: ReactNode
+	disabled?: boolean
+}) {
 	return (
-		<button type="submit" className={submitStyles}>
+		<button type="submit" className={submitStyles} disabled={disabled}>
 			{children}
 		</button>
 	)

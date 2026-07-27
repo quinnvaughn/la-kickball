@@ -5,6 +5,7 @@ import {
 	Scripts,
 } from "@tanstack/react-router"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
+import { ModalHost } from "#/components/ui/modal-host"
 import type { trpc } from "#/server/client"
 import appCss from "../styles.css?url"
 
@@ -61,6 +62,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			</head>
 			<body>
 				{children}
+				<ModalHost />
 				<TanStackDevtools
 					config={{
 						position: "bottom-right",

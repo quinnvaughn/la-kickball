@@ -4,13 +4,16 @@ import {
 	type ReactNode,
 	useContext,
 	useId,
+	useState,
 } from "react"
+import { IoEyeOffOutline, IoEyeOutline } from "react-icons/io5"
 import { css, cx } from "styled-system/css"
 
 const fieldStyles = css({
 	display: "flex",
 	flexDirection: "column",
 	gap: "1.5",
+	width: "full",
 })
 
 const labelStyles = css({
@@ -45,6 +48,31 @@ const inputStyles = css({
 const invalidInputStyles = css({
 	borderColor: "coral.dark",
 	_focus: { outlineColor: "coral.dark" },
+})
+
+const inputWrapperStyles = css({
+	position: "relative",
+	width: "full",
+})
+
+const passwordInputStyles = css({
+	paddingRight: "9",
+})
+
+const toggleButtonStyles = css({
+	position: "absolute",
+	top: "0",
+	right: "0",
+	bottom: "0",
+	display: "flex",
+	alignItems: "center",
+	paddingX: "3",
+	background: "none",
+	border: "none",
+	cursor: "pointer",
+	fontSize: "lg",
+	color: "rgba(27,42,74,0.4)",
+	_hover: { color: "ink" },
 })
 
 const hintStyles = css({
@@ -136,6 +164,43 @@ function Input({ className }: { className?: string }) {
 	)
 }
 
+function PasswordInput({ className }: { className?: string }) {
+	const { id, required, error, hintId, errorId, inputProps } =
+		useTextFieldContext()
+	const [visible, setVisible] = useState(false)
+	const describedBy =
+		[error ? errorId : null, hintId].filter(Boolean).join(" ") || undefined
+
+	return (
+		<div className={inputWrapperStyles}>
+			<input
+				id={id}
+				required={required}
+				aria-invalid={!!error}
+				aria-describedby={describedBy}
+				type={visible ? "text" : "password"}
+				className={cx(
+					inputStyles,
+					passwordInputStyles,
+					error && invalidInputStyles,
+					className,
+				)}
+				{...inputProps}
+			/>
+			<button
+				type="button"
+				aria-label={visible ? "Hide password" : "Show password"}
+				aria-pressed={visible}
+				tabIndex={-1}
+				onClick={() => setVisible((v) => !v)}
+				className={toggleButtonStyles}
+			>
+				{visible ? <IoEyeOffOutline /> : <IoEyeOutline />}
+			</button>
+		</div>
+	)
+}
+
 function Hint({ children }: { children: ReactNode }) {
 	const { hintId } = useTextFieldContext()
 	return (
@@ -158,6 +223,7 @@ function ErrorComponent() {
 export const TextField = Object.assign(Root, {
 	Label,
 	Input,
+	PasswordInput,
 	Hint,
 	Error: ErrorComponent,
 })

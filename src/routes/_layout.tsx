@@ -4,6 +4,7 @@ import { Footer } from "#/components/nav/footer"
 import { Topbar } from "#/components/nav/topbar"
 
 export const Route = createFileRoute("/_layout")({
+	loader: async ({ context: { trpc } }) => trpc.auth.me.query(),
 	component: Layout,
 })
 
