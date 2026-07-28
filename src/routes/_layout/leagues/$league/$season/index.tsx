@@ -2,7 +2,9 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useState } from "react"
 import { css } from "styled-system/css"
 import { HStack, VStack } from "styled-system/jsx"
+import { match } from "ts-pattern"
 import { LeagueLocationLink } from "#/components/leagues/league-location-link"
+import { RegisterTab } from "#/components/seasons/register-tab"
 import { RegistrationPricing } from "#/components/seasons/registration-pricing"
 import {
 	formatDayOfTheWeek,
@@ -130,6 +132,16 @@ function RouteComponent() {
 						</Tabs.StateTab>
 					))}
 				</Tabs>
+				{match(activeTab)
+					.with("register", () => (
+						<RegisterTab
+							playerMinimum={ROSTER_MINIMUM}
+							league={season.league.name}
+							season={season.name}
+							handleGoToStandings={() => setActiveTab("standings")}
+						/>
+					))
+					.otherwise(() => null)}
 			</VStack>
 		</PageContainer>
 	)

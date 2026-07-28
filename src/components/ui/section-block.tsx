@@ -11,7 +11,7 @@ export function SectionBlock({ heading, children, stretch = false }: Props) {
 	return (
 		<section
 			className={css({
-				py: "10",
+				py: "8",
 			})}
 		>
 			<VStack alignItems={stretch ? "stretch" : "start"} gap="5">

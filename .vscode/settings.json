@@ -1,4 +1,7 @@
 {
+  "editor.quickSuggestions": {
+    "strings": true
+  },
   "files.watcherExclude": {
     "**/routeTree.gen.ts": true
   },

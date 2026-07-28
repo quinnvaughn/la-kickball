@@ -17,6 +17,8 @@ import { Route as LayoutLeaguesLeagueIndexRouteImport } from './routes/_layout/l
 import { Route as LayoutLeaguesLeagueStatsRouteImport } from './routes/_layout/leagues/$league/stats'
 import { Route as LayoutUserUserIdIndexRouteImport } from './routes/_layout/user/$userId/index'
 import { Route as LayoutLeaguesLeagueSeasonIndexRouteImport } from './routes/_layout/leagues/$league/$season/index'
+import { Route as LayoutLeaguesLeagueSeasonCreateTeamRouteImport } from './routes/_layout/leagues/$league/$season/create-team'
+import { Route as LayoutLeaguesLeagueSeasonFreeAgentRouteImport } from './routes/_layout/leagues/$league/$season/free-agent'
 
 const LayoutRoute = LayoutRouteImport.update({
   id: '/_layout',
@@ -60,6 +62,18 @@ const LayoutLeaguesLeagueSeasonIndexRoute =
     path: '/leagues/$league/$season/',
     getParentRoute: () => LayoutRoute,
   } as any)
+const LayoutLeaguesLeagueSeasonCreateTeamRoute =
+  LayoutLeaguesLeagueSeasonCreateTeamRouteImport.update({
+    id: '/leagues/$league/$season/create-team',
+    path: '/leagues/$league/$season/create-team',
+    getParentRoute: () => LayoutRoute,
+  } as any)
+const LayoutLeaguesLeagueSeasonFreeAgentRoute =
+  LayoutLeaguesLeagueSeasonFreeAgentRouteImport.update({
+    id: '/leagues/$league/$season/free-agent',
+    path: '/leagues/$league/$season/free-agent',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
@@ -68,6 +82,8 @@ export interface FileRoutesByFullPath {
   '/leagues/$league/stats': typeof LayoutLeaguesLeagueStatsRoute
   '/leagues/$league/': typeof LayoutLeaguesLeagueIndexRoute
   '/user/$userId/': typeof LayoutUserUserIdIndexRoute
+  '/leagues/$league/$season/create-team': typeof LayoutLeaguesLeagueSeasonCreateTeamRoute
+  '/leagues/$league/$season/free-agent': typeof LayoutLeaguesLeagueSeasonFreeAgentRoute
   '/leagues/$league/$season/': typeof LayoutLeaguesLeagueSeasonIndexRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +93,8 @@ export interface FileRoutesByTo {
   '/leagues/$league/stats': typeof LayoutLeaguesLeagueStatsRoute
   '/leagues/$league': typeof LayoutLeaguesLeagueIndexRoute
   '/user/$userId': typeof LayoutUserUserIdIndexRoute
+  '/leagues/$league/$season/create-team': typeof LayoutLeaguesLeagueSeasonCreateTeamRoute
+  '/leagues/$league/$season/free-agent': typeof LayoutLeaguesLeagueSeasonFreeAgentRoute
   '/leagues/$league/$season': typeof LayoutLeaguesLeagueSeasonIndexRoute
 }
 export interface FileRoutesById {
@@ -88,6 +106,8 @@ export interface FileRoutesById {
   '/_layout/leagues/$league/stats': typeof LayoutLeaguesLeagueStatsRoute
   '/_layout/leagues/$league/': typeof LayoutLeaguesLeagueIndexRoute
   '/_layout/user/$userId/': typeof LayoutUserUserIdIndexRoute
+  '/_layout/leagues/$league/$season/create-team': typeof LayoutLeaguesLeagueSeasonCreateTeamRoute
+  '/_layout/leagues/$league/$season/free-agent': typeof LayoutLeaguesLeagueSeasonFreeAgentRoute
   '/_layout/leagues/$league/$season/': typeof LayoutLeaguesLeagueSeasonIndexRoute
 }
 export interface FileRouteTypes {
@@ -99,6 +119,8 @@ export interface FileRouteTypes {
     | '/leagues/$league/stats'
     | '/leagues/$league/'
     | '/user/$userId/'
+    | '/leagues/$league/$season/create-team'
+    | '/leagues/$league/$season/free-agent'
     | '/leagues/$league/$season/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -108,6 +130,8 @@ export interface FileRouteTypes {
     | '/leagues/$league/stats'
     | '/leagues/$league'
     | '/user/$userId'
+    | '/leagues/$league/$season/create-team'
+    | '/leagues/$league/$season/free-agent'
     | '/leagues/$league/$season'
   id:
     | '__root__'
@@ -118,6 +142,8 @@ export interface FileRouteTypes {
     | '/_layout/leagues/$league/stats'
     | '/_layout/leagues/$league/'
     | '/_layout/user/$userId/'
+    | '/_layout/leagues/$league/$season/create-team'
+    | '/_layout/leagues/$league/$season/free-agent'
     | '/_layout/leagues/$league/$season/'
   fileRoutesById: FileRoutesById
 }
@@ -184,6 +210,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutLeaguesLeagueSeasonIndexRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/leagues/$league/$season/create-team': {
+      id: '/_layout/leagues/$league/$season/create-team'
+      path: '/leagues/$league/$season/create-team'
+      fullPath: '/leagues/$league/$season/create-team'
+      preLoaderRoute: typeof LayoutLeaguesLeagueSeasonCreateTeamRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/leagues/$league/$season/free-agent': {
+      id: '/_layout/leagues/$league/$season/free-agent'
+      path: '/leagues/$league/$season/free-agent'
+      fullPath: '/leagues/$league/$season/free-agent'
+      preLoaderRoute: typeof LayoutLeaguesLeagueSeasonFreeAgentRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
@@ -193,6 +233,8 @@ interface LayoutRouteChildren {
   LayoutLeaguesLeagueStatsRoute: typeof LayoutLeaguesLeagueStatsRoute
   LayoutLeaguesLeagueIndexRoute: typeof LayoutLeaguesLeagueIndexRoute
   LayoutUserUserIdIndexRoute: typeof LayoutUserUserIdIndexRoute
+  LayoutLeaguesLeagueSeasonCreateTeamRoute: typeof LayoutLeaguesLeagueSeasonCreateTeamRoute
+  LayoutLeaguesLeagueSeasonFreeAgentRoute: typeof LayoutLeaguesLeagueSeasonFreeAgentRoute
   LayoutLeaguesLeagueSeasonIndexRoute: typeof LayoutLeaguesLeagueSeasonIndexRoute
 }
 
@@ -202,6 +244,10 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutLeaguesLeagueStatsRoute: LayoutLeaguesLeagueStatsRoute,
   LayoutLeaguesLeagueIndexRoute: LayoutLeaguesLeagueIndexRoute,
   LayoutUserUserIdIndexRoute: LayoutUserUserIdIndexRoute,
+  LayoutLeaguesLeagueSeasonCreateTeamRoute:
+    LayoutLeaguesLeagueSeasonCreateTeamRoute,
+  LayoutLeaguesLeagueSeasonFreeAgentRoute:
+    LayoutLeaguesLeagueSeasonFreeAgentRoute,
   LayoutLeaguesLeagueSeasonIndexRoute: LayoutLeaguesLeagueSeasonIndexRoute,
 }
 
