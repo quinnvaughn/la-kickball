@@ -51,3 +51,27 @@ export async function isUserRegisteredForSeason(
 
 	return !!availability
 }
+
+// Season-long captain roster spot only (weekId null) — a captain's
+// one-off weekly-sub pickups don't count. Returns the team they captain
+// in this season, or null if they don't captain any team here.
+export async function getCaptainTeamIdForUser(
+	userId: string,
+	seasonId: string,
+): Promise<string | null> {
+	const [membership] = await db
+		.select({ teamId: teamMemberships.teamId })
+		.from(teamMemberships)
+		.innerJoin(teams, eq(teamMemberships.teamId, teams.id))
+		.where(
+			and(
+				eq(teamMemberships.userId, userId),
+				eq(teamMemberships.isCaptain, true),
+				isNull(teamMemberships.weekId),
+				eq(teams.seasonId, seasonId),
+			),
+		)
+		.limit(1)
+
+	return membership?.teamId ?? null
+}

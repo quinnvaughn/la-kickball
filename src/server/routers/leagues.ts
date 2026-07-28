@@ -5,8 +5,7 @@ import { db } from "../db"
 import { isUniqueConstraintError } from "../db/errors"
 import { gameLogs, games, leagues, seasons, users, weeks } from "../db/schema"
 import { slugify } from "../domain/leagues"
-import { isUserRegisteredForSeason } from "../domain/registration"
-import { bucketSeasonsByStatus, formatSeasonName } from "../domain/seasons"
+import { bucketSeasonsByStatus } from "../domain/seasons"
 import {
 	buildCareerLeaders,
 	CAREER_STAT_FIELD_KEYS,
@@ -103,44 +102,6 @@ export const leaguesRouter = router({
 				...league,
 				seasons: bucketSeasonsByStatus(league.seasons),
 				careerLeaders: buildCareerLeaders(totals.map(computeCareerStats)),
-			}
-		}),
-
-	season: publicProcedure
-		.input(z.object({ leagueSlug: z.string(), seasonSlug: z.string() }))
-		.query(async ({ input, ctx }) => {
-			const league = await db.query.leagues.findFirst({
-				where: { slug: { eq: input.leagueSlug } },
-			})
-
-			if (!league) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "League not found" })
-			}
-
-			const season = await db.query.seasons.findFirst({
-				where: {
-					leagueId: { eq: league.id },
-					slug: { eq: input.seasonSlug },
-				},
-				with: {
-					winner: true,
-					teams: true,
-				},
-			})
-
-			if (!season) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "Season not found" })
-			}
-
-			const isRegistered = ctx.user
-				? await isUserRegisteredForSeason(ctx.user.id, season.id)
-				: false
-
-			return {
-				...season,
-				name: formatSeasonName(season),
-				league,
-				isRegistered,
 			}
 		}),
 

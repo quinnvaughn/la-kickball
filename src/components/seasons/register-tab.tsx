@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { css } from "styled-system/css"
 import { Grid } from "styled-system/jsx"
-import type { SeasonWithStatus } from "#/server/domain/seasons"
 import { SectionBlock } from "../ui/section-block"
 
 type ROProps = {

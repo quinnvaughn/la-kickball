@@ -62,23 +62,33 @@ const footerStyles = css({
 	gap: "3",
 })
 
-const submitStyles = css({
+const actionButtonStyles = css({
 	width: "full",
-	background: "coral",
-	color: "white",
 	fontFamily: "heading",
 	fontWeight: "bold",
 	fontSize: "md",
 	padding: "3.5",
-	borderRadius: "md",
-	border: "none",
+	borderRadius: "full",
 	cursor: "pointer",
-	_hover: { background: "coral.dark" },
 	_disabled: {
 		cursor: "not-allowed",
 		opacity: "0.5",
-		_hover: { background: "coral" },
 	},
+})
+
+const submitStyles = css({
+	background: "coral",
+	color: "white",
+	border: "none",
+	_hover: { background: "coral.dark" },
+	_disabled: { _hover: { background: "coral" } },
+})
+
+const cancelStyles = css({
+	background: "none",
+	color: "purple.dark",
+	border: "2px solid",
+	borderColor: "purple",
 })
 
 const switchRowStyles = css({
@@ -168,7 +178,32 @@ function SubmitButton({
 	disabled?: boolean
 }) {
 	return (
-		<button type="submit" className={submitStyles} disabled={disabled}>
+		<button
+			type="submit"
+			className={cx(actionButtonStyles, submitStyles)}
+			disabled={disabled}
+		>
+			{children}
+		</button>
+	)
+}
+
+function CancelButton({
+	children,
+	disabled,
+	onClick,
+}: {
+	children: ReactNode
+	disabled?: boolean
+	onClick?: () => void
+}) {
+	return (
+		<button
+			type="button"
+			className={cx(actionButtonStyles, cancelStyles)}
+			disabled={disabled}
+			onClick={onClick}
+		>
 			{children}
 		</button>
 	)
@@ -186,6 +221,7 @@ export const Modal = Object.assign(Root, {
 	Footer,
 	SwitchPrompt,
 	SubmitButton,
+	CancelButton,
 	SwitchLink: (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
 		<button type="button" className={switchLinkStyles} {...props} />
 	),

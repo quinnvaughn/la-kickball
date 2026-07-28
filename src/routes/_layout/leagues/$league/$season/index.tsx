@@ -4,6 +4,7 @@ import { css } from "styled-system/css"
 import { HStack, VStack } from "styled-system/jsx"
 import { match } from "ts-pattern"
 import { LeagueLocationLink } from "#/components/leagues/league-location-link"
+import { FreeAgentsTab } from "#/components/seasons/free-agents-tab"
 import { RegisterTab } from "#/components/seasons/register-tab"
 import { RegistrationPricing } from "#/components/seasons/registration-pricing"
 import {
@@ -21,7 +22,7 @@ import { ROSTER_MINIMUM } from "#/server/domain/seasons"
 export const Route = createFileRoute("/_layout/leagues/$league/$season/")({
 	component: RouteComponent,
 	loader: async ({ context: { trpc }, params: { league, season } }) => {
-		return trpc.leagues.season.query({ leagueSlug: league, seasonSlug: season })
+		return trpc.seasons.bySlug.query({ leagueSlug: league, seasonSlug: season })
 	},
 })
 
@@ -139,6 +140,12 @@ function RouteComponent() {
 							league={season.league.name}
 							season={season.name}
 							handleGoToStandings={() => setActiveTab("standings")}
+						/>
+					))
+					.with("free-agents", () => (
+						<FreeAgentsTab
+							freeAgents={season.freeAgents}
+							captainTeamId={season.myCaptainTeamId}
 						/>
 					))
 					.otherwise(() => null)}

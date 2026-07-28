@@ -328,14 +328,20 @@ DECLARE
 	future_open_team_2 uuid;
 	active_team uuid;
 	active_next_week_id uuid;
+	soon_week1_id uuid;
 	availability_1 uuid;
 	availability_2 uuid;
+	availability_3 uuid;
+	new_free_agent_1 uuid;
+	new_free_agent_2 uuid;
+	soon_captain_team uuid;
+	real_captain_id uuid;
 BEGIN
 	-- Wipe any previously seeded league (cascades away its seasons, teams,
 	-- weeks, games, stats, MVPs, and free-agent data) and any leftover
 	-- fake users, so this always reseeds clean relative to today.
 	DELETE FROM leagues WHERE slug = 'cheviot-hills';
-	DELETE FROM users WHERE email LIKE 'fake-player-%@example.com';
+	DELETE FROM users WHERE email LIKE 'fake-player-%@example.com' OR email = 'fake-captain@example.com';
 
 	INSERT INTO leagues (id, name, slug, location_name, location_url)
 	VALUES (
@@ -478,8 +484,73 @@ BEGIN
 	INSERT INTO team_join_requests (id, team_id, player_id, accepted_at)
 	VALUES (gen_random_uuid(), future_open_team_2, player_pool[2], NULL);
 
-	-- A couple of free agents open for the active season's next upcoming
-	-- week, one with a pending invite from a team.
+	-- Two players who've never suited up anywhere — kept out of
+	-- player_pool above so they never land on a roster or in game_logs.
+	-- Gives the free-agent/weekly-sub cards a real "new player, no games
+	-- logged" case instead of every row having career stats.
+	new_free_agent_1 := gen_random_uuid();
+	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin, is_ref)
+	VALUES (
+		new_free_agent_1,
+		first_names[1 + floor(random() * array_length(first_names, 1))::int],
+		last_names[1 + floor(random() * array_length(last_names, 1))::int],
+		'fake-player-newfa1@example.com',
+		'5559990001',
+		'seed-data-not-a-real-hash',
+		false,
+		false
+	);
+	new_free_agent_2 := gen_random_uuid();
+	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin, is_ref)
+	VALUES (
+		new_free_agent_2,
+		first_names[1 + floor(random() * array_length(first_names, 1))::int],
+		last_names[1 + floor(random() * array_length(last_names, 1))::int],
+		'fake-player-newfa2@example.com',
+		'5559990002',
+		'seed-data-not-a-real-hash',
+		false,
+		false
+	);
+
+	-- A few free agents open against the summer 2026 men's season's first
+	-- week (v_soon_id) — registration is open but nothing's been played
+	-- yet, so this is the season-wide "Free Agents" pool: two experienced
+	-- players plus the brand-new one above.
+	SELECT id INTO soon_week1_id FROM weeks WHERE season_id = v_soon_id AND week_number = 1;
+
+	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (gen_random_uuid(), player_pool[5], soon_week1_id);
+	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (gen_random_uuid(), player_pool[6], soon_week1_id);
+	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (gen_random_uuid(), new_free_agent_1, soon_week1_id);
+
+	-- A real, loggable-in captain for one summer 2026 men's team — every
+	-- other seeded player has a placeholder password_hash and can't
+	-- authenticate, so this swaps in a real argon2 hash (password:
+	-- "password123") on one team's captain slot to actually exercise the
+	-- captain view. Roster/team otherwise untouched.
+	SELECT id INTO soon_captain_team FROM teams WHERE season_id = v_soon_id ORDER BY name LIMIT 1;
+
+	real_captain_id := gen_random_uuid();
+	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin, is_ref)
+	VALUES (
+		real_captain_id,
+		'Test',
+		'Captain',
+		'fake-captain@example.com',
+		'5559990003',
+		'$argon2id$v=19$m=65536,p=4,t=3$DK/9jSdx18HcKXZ09uCxCA$caqcsSXOvBkL7aW4ph4ti1c0eyYQlM+PiVAaPmxXzTA',
+		false,
+		false
+	);
+
+	UPDATE team_memberships
+	SET user_id = real_captain_id
+	WHERE team_id = soon_captain_team AND is_captain = true;
+
+	-- A few free agents open for the active season's next upcoming week
+	-- (the "Weekly Subs" pool), one with a pending invite from a team,
+	-- plus the other brand-new player so this tab also shows the
+	-- "no games logged" case.
 	SELECT id INTO active_next_week_id FROM weeks WHERE season_id = v_active_id AND week_number = 4;
 	SELECT id INTO active_team FROM teams WHERE season_id = v_active_id ORDER BY name LIMIT 1;
 
@@ -487,6 +558,8 @@ BEGIN
 	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (availability_1, player_pool[3], active_next_week_id);
 	availability_2 := gen_random_uuid();
 	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (availability_2, player_pool[4], active_next_week_id);
+	availability_3 := gen_random_uuid();
+	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (availability_3, new_free_agent_2, active_next_week_id);
 
 	INSERT INTO free_agent_invites (id, team_id, availability_id, accepted_at)
 	VALUES (gen_random_uuid(), active_team, availability_1, NULL);

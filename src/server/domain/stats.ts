@@ -182,6 +182,71 @@ export function toCareerStatsPlayer(row: CareerStatsRow): CareerStatsPlayer {
 	}
 }
 
+// Stats that make sense shown as a rate "per game" to a captain sizing up
+// a free agent/sub — the rate stats (avg/obp/slg/ops) are already a ratio
+// over at-bats, dividing them again by games played would be meaningless.
+export const PER_GAME_STAT_CATEGORIES = LEADER_CATEGORIES.filter(
+	(category) => !isRateCategory(category),
+)
+
+export type PerGameStatCategory = (typeof PER_GAME_STAT_CATEGORIES)[number]
+
+const STAT_LABELS = new Map(
+	CAREER_STAT_FIELDS.map(({ key, label }) => [key, label]),
+)
+
+export interface PlayerTopStat {
+	key: PerGameStatCategory
+	label: string
+	perGame: number
+}
+
+export interface PlayerAvailabilitySummary {
+	userId: string
+	firstName: string
+	lastName: string
+	gamesPlayed: number
+	// null when the player has never logged a game — nothing to rank yet.
+	topStat: PlayerTopStat | null
+}
+
+// Surfaces whichever counting stat a player racks up fastest per game they
+// play (highest per-game rate wins, ties keep whichever category was
+// checked first) — someone who averages 2.1 RKI/game reads as an RKI guy,
+// someone who mostly walks reads as a walks guy. This is a judgment call
+// (favoring the player's own standout number over, say, how they compare
+// to the rest of the league), not a derived "correct" answer.
+export function buildPlayerAvailabilitySummary(
+	row: CareerStatsRow,
+): PlayerAvailabilitySummary {
+	const { userId, firstName, lastName, games } = row
+
+	if (games === 0) {
+		return { userId, firstName, lastName, gamesPlayed: 0, topStat: null }
+	}
+
+	const best = PER_GAME_STAT_CATEGORIES.reduce<{
+		key: PerGameStatCategory
+		value: number
+	} | null>(
+		(best, key) =>
+			!best || row[key] > best.value ? { key, value: row[key] } : best,
+		null,
+	)
+
+	return {
+		userId,
+		firstName,
+		lastName,
+		gamesPlayed: games,
+		topStat: best && {
+			key: best.key,
+			label: STAT_LABELS.get(best.key) ?? best.key,
+			perGame: best.value / games,
+		},
+	}
+}
+
 export function sortCareerStats(
 	rows: CareerStatsRow[],
 	sortBy: CareerStatField,
