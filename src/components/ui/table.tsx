@@ -36,7 +36,7 @@ const tableStyle = css({
 	borderStyle: "solid",
 })
 
-function thStyle(isActive: boolean, sortable: boolean) {
+function thStyle(isActive: boolean, sortable: boolean, numeric: boolean) {
 	return css({
 		color: isActive ? "purple.dark" : "subtitle",
 		fontSize: "sm",
@@ -49,7 +49,11 @@ function thStyle(isActive: boolean, sortable: boolean) {
 		borderBottomStyle: "solid",
 		userSelect: "none",
 		whiteSpace: "nowrap",
-		textAlign: "left",
+		// Numeric headers center to sit over their centered cells (see
+		// Cell's `numeric` prop) — left-aligning them here would let the
+		// header label drift away from its own column's values as the
+		// column stretches wider than the label.
+		textAlign: numeric ? "center" : "left",
 		padding: "4",
 	})
 }
@@ -78,19 +82,30 @@ function Root<Key extends string>({
 	sortBy,
 	sortDir,
 	onSort,
+	className,
 	children,
 }: {
 	sortBy: Key
 	sortDir: SortDir
 	onSort?: (key: Key) => void
+	// Merged onto the <table> after tableStyle, so callers can override
+	// things like minWidth (e.g. a table with few columns that shouldn't
+	// be forced to the 900px career-stats width) without a new prop per
+	// property.
+	className?: string
 	children: ReactNode
 }) {
 	return (
 		<TableContext.Provider
 			value={{ sortBy, sortDir, onSort: onSort as TableContextValue["onSort"] }}
 		>
-			<div className={css({ overflowX: "auto" })}>
-				<table className={tableStyle}>{children}</table>
+			{/* Explicit width here, not just on the table — inside a flex
+			parent with alignItems: "flex-start" (VStack/SectionBlock's
+			default), a plain block div shrinks to fit its content instead
+			of stretching, which silently defeats width: "100%" on the
+			table itself. */}
+			<div className={css({ overflowX: "auto", width: "100%" })}>
+				<table className={cx(tableStyle, className)}>{children}</table>
 			</div>
 		</TableContext.Provider>
 	)
@@ -99,14 +114,14 @@ function Root<Key extends string>({
 function Head<Key extends string>({
 	columns,
 }: {
-	columns: { key: Key; label: string; sortable?: boolean }[]
+	columns: { key: Key; label: string; sortable?: boolean; numeric?: boolean }[]
 }) {
 	const { sortBy, sortDir, onSort } = useTableContext()
 
 	return (
 		<thead>
 			<tr>
-				{columns.map(({ key, label, sortable = true }) => {
+				{columns.map(({ key, label, sortable = true, numeric = false }) => {
 					const isActive = sortable && sortBy === key
 					const canSort = sortable && !!onSort
 					const Icon =
@@ -116,7 +131,7 @@ function Head<Key extends string>({
 						<th
 							key={key}
 							onClick={canSort ? () => onSort?.(key) : undefined}
-							className={thStyle(isActive, canSort)}
+							className={thStyle(isActive, canSort, numeric)}
 						>
 							<span className={headerLabelStyle}>
 								{label}
@@ -145,7 +160,9 @@ function Cell({
 	children: ReactNode
 	numeric?: boolean
 }) {
-	return <td className={numeric ? cx(tdStyle, numStyle) : tdStyle}>{children}</td>
+	return (
+		<td className={numeric ? cx(tdStyle, numStyle) : tdStyle}>{children}</td>
+	)
 }
 
 const pageButtonStyle = css({
@@ -221,11 +238,17 @@ function PageButton({
 	page: number
 	active?: boolean
 	disabled?: boolean
-	renderLink: (page: number, children: ReactNode, className: string) => ReactNode
+	renderLink: (
+		page: number,
+		children: ReactNode,
+		className: string,
+	) => ReactNode
 	children: ReactNode
 }) {
 	if (active) {
-		return <span className={cx(pageButtonStyle, pageActiveStyle)}>{children}</span>
+		return (
+			<span className={cx(pageButtonStyle, pageActiveStyle)}>{children}</span>
+		)
 	}
 
 	if (disabled) {
@@ -247,7 +270,11 @@ function Pagination({
 	// The Table has no knowledge of routing, so the caller is responsible
 	// for rendering the actual <Link> (with its route-specific `to`/params)
 	// around the given children, using the given className for button styling.
-	renderLink: (page: number, children: ReactNode, className: string) => ReactNode
+	renderLink: (
+		page: number,
+		children: ReactNode,
+		className: string,
+	) => ReactNode
 }) {
 	return (
 		<div className={paginationRowStyle}>

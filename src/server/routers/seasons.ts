@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server"
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm"
 import z from "zod"
 import { db } from "../db"
 import {
@@ -15,6 +15,7 @@ import {
 	isUserRegisteredForSeason,
 } from "../domain/registration"
 import { formatSeasonName } from "../domain/seasons"
+import { computeStandings } from "../domain/standings"
 import {
 	buildPlayerAvailabilitySummary,
 	type CareerStatsRow,
@@ -149,6 +150,30 @@ async function currentWeekForSeason(seasonId: string) {
 	return week ?? null
 }
 
+// Completed regular-season games for a season — playoff rounds and
+// rainouts/upcoming games (unset scores) are excluded since they shouldn't
+// factor into the standings computation in domain/standings.ts.
+async function completedRegularSeasonGamesForSeason(seasonId: string) {
+	return db
+		.select({
+			homeTeamId: games.homeTeamId,
+			awayTeamId: games.awayTeamId,
+			homeScore: games.homeScore,
+			awayScore: games.awayScore,
+		})
+		.from(games)
+		.innerJoin(weeks, eq(games.weekId, weeks.id))
+		.where(
+			and(
+				eq(weeks.seasonId, seasonId),
+				eq(games.round, "regular"),
+				isNotNull(games.homeScore),
+				isNotNull(games.awayScore),
+				isNull(games.cancelledAt),
+			),
+		)
+}
+
 async function weeklySubUserIdsForWeek(weekId: string): Promise<string[]> {
 	const rows = await db
 		.select({ userId: freeAgentAvailability.userId })
@@ -186,17 +211,23 @@ export const seasonsRouter = router({
 				throw new TRPCError({ code: "NOT_FOUND", message: "Season not found" })
 			}
 
-			const [isRegistered, myCaptainTeamId, freeAgentUserIds, currentWeek] =
-				await Promise.all([
-					ctx.user
-						? isUserRegisteredForSeason(ctx.user.id, season.id)
-						: Promise.resolve(false),
-					ctx.user
-						? getCaptainTeamIdForUser(ctx.user.id, season.id)
-						: Promise.resolve(null),
-					freeAgentUserIdsForSeason(season.id),
-					currentWeekForSeason(season.id),
-				])
+			const [
+				isRegistered,
+				myCaptainTeamId,
+				freeAgentUserIds,
+				currentWeek,
+				completedGames,
+			] = await Promise.all([
+				ctx.user
+					? isUserRegisteredForSeason(ctx.user.id, season.id)
+					: Promise.resolve(false),
+				ctx.user
+					? getCaptainTeamIdForUser(ctx.user.id, season.id)
+					: Promise.resolve(null),
+				freeAgentUserIdsForSeason(season.id),
+				currentWeekForSeason(season.id),
+				completedRegularSeasonGamesForSeason(season.id),
+			])
 
 			const weeklySubUserIds = currentWeek
 				? await weeklySubUserIdsForWeek(currentWeek.id)
@@ -206,6 +237,17 @@ export const seasonsRouter = router({
 				playerAvailabilitySummariesForUsers(freeAgentUserIds),
 				playerAvailabilitySummariesForUsers(weeklySubUserIds),
 			])
+
+			const standings = computeStandings(
+				season.teams.map((team) => ({ teamId: team.id, teamName: team.name })),
+				completedGames.map((game) => ({
+					homeTeamId: game.homeTeamId,
+					awayTeamId: game.awayTeamId,
+					// Filtered to isNotNull in the query above.
+					homeScore: game.homeScore as number,
+					awayScore: game.awayScore as number,
+				})),
+			)
 
 			return {
 				...season,
@@ -218,6 +260,7 @@ export const seasonsRouter = router({
 					week: currentWeek,
 					players: weeklySubs,
 				},
+				standings,
 			}
 		}),
 })

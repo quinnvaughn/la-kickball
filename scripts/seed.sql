@@ -324,8 +324,6 @@ DECLARE
 	i int;
 	new_user_id uuid;
 
-	future_open_team_1 uuid;
-	future_open_team_2 uuid;
 	active_team uuid;
 	active_next_week_id uuid;
 	soon_week1_id uuid;
@@ -456,8 +454,9 @@ BEGIN
 		END IF;
 	END LOOP;
 
-	-- Future: registration open, rosters formed, nothing scheduled yet.
-	PERFORM pg_temp.seed_season(v_future_id, 4, 10, 8, 0, false, false, future_team_names, player_pool, ref_pool);
+	-- Future: registration open, no teams have registered yet — exercises
+	-- the "no registered teams" empty state on the standings/teams tabs.
+	PERFORM pg_temp.seed_season(v_future_id, 0, 10, 8, 0, false, false, future_team_names, player_pool, ref_pool);
 
 	-- Starting soon: registration open, kicks off within the next two weeks.
 	PERFORM pg_temp.seed_season(v_soon_id, 4, 10, 8, 0, false, false, soon_team_names, player_pool, ref_pool);
@@ -470,19 +469,6 @@ BEGIN
 
 	-- Completed: entire season including the final has been played, winner recorded.
 	PERFORM pg_temp.seed_season(v_completed_id, 4, 10, 8, 8, true, true, completed_team_names, player_pool, ref_pool);
-
-	-- A couple of open teams on the future season + join requests, so the
-	-- "still recruiting" team state has something to look at.
-	SELECT id INTO future_open_team_1 FROM teams WHERE season_id = v_future_id ORDER BY name LIMIT 1;
-	SELECT id INTO future_open_team_2 FROM teams WHERE season_id = v_future_id ORDER BY name OFFSET 1 LIMIT 1;
-
-	UPDATE teams SET is_open = true, invite_code = upper(substr(md5(random()::text), 1, 6)) WHERE id = future_open_team_1;
-	UPDATE teams SET is_open = true, invite_code = upper(substr(md5(random()::text), 1, 6)) WHERE id = future_open_team_2;
-
-	INSERT INTO team_join_requests (id, team_id, player_id, accepted_at)
-	VALUES (gen_random_uuid(), future_open_team_1, player_pool[1], now());
-	INSERT INTO team_join_requests (id, team_id, player_id, accepted_at)
-	VALUES (gen_random_uuid(), future_open_team_2, player_pool[2], NULL);
 
 	-- Two players who've never suited up anywhere — kept out of
 	-- player_pool above so they never land on a roster or in game_logs.

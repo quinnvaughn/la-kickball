@@ -15,9 +15,14 @@ const PAGE_SIZE = 10
 
 type SortKey = "player" | CareerStatField
 
-const columns: { key: SortKey; label: string; sortable?: boolean }[] = [
+const columns: {
+	key: SortKey
+	label: string
+	sortable?: boolean
+	numeric?: boolean
+}[] = [
 	{ key: "player", label: "Player", sortable: false },
-	...CAREER_STAT_FIELDS,
+	...CAREER_STAT_FIELDS.map((field) => ({ ...field, numeric: true })),
 ]
 
 export const Route = createFileRoute("/_layout/leagues/$league/stats")({
@@ -66,6 +71,7 @@ function RouteComponent() {
 		const nextDir = sortBy === key && sortDir === "desc" ? "asc" : "desc"
 		navigate({
 			search: (prev) => ({ ...prev, sortBy: key, sortDir: nextDir, page: 1 }),
+			resetScroll: false,
 		})
 	}
 

@@ -15,6 +15,7 @@ export function EmptyTabContainer({ children }: Props) {
 				padding: "8",
 				textAlign: "center",
 				borderRadius: "2xl",
+				width: "full",
 			})}
 		>
 			{children}

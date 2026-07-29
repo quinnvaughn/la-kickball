@@ -7,6 +7,7 @@ import { LeagueLocationLink } from "#/components/leagues/league-location-link"
 import { FreeAgentsTab } from "#/components/seasons/free-agents-tab"
 import { RegisterTab } from "#/components/seasons/register-tab"
 import { RegistrationPricing } from "#/components/seasons/registration-pricing"
+import { StandingsTab } from "#/components/seasons/standings-tab"
 import {
 	formatDayOfTheWeek,
 	formatTimeRange,
@@ -28,6 +29,7 @@ export const Route = createFileRoute("/_layout/leagues/$league/$season/")({
 
 function RouteComponent() {
 	const season = Route.useLoaderData()
+	const { league, season: seasonSlug } = Route.useParams()
 	const phase = season.startDate
 		? getSeasonPhase(season.startDate, season.weeks)
 		: "upcoming"
@@ -146,6 +148,13 @@ function RouteComponent() {
 						<FreeAgentsTab
 							freeAgents={season.freeAgents}
 							captainTeamId={season.myCaptainTeamId}
+						/>
+					))
+					.with("standings", () => (
+						<StandingsTab
+							standings={season.standings}
+							league={league}
+							season={seasonSlug}
 						/>
 					))
 					.otherwise(() => null)}
