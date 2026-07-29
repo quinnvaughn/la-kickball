@@ -96,7 +96,20 @@ export function StandingsTab({ standings, league, season }: Props) {
 						<Table.Body>
 							{sorted.map((team) => (
 								<Table.Row key={team.teamId}>
-									<Table.Cell>{team.teamName}</Table.Cell>
+									<Table.Cell>
+										<Link
+											to="/leagues/$league/$season/$teamId"
+											params={{ league, season, teamId: team.teamId }}
+											className={css({
+												fontWeight: "bold",
+												fontFamily: "heading",
+												color: "purple.dark",
+												_hover: { textDecoration: "underline" },
+											})}
+										>
+											{team.teamName}
+										</Link>
+									</Table.Cell>
 									<Table.Cell numeric>{team.wins}</Table.Cell>
 									<Table.Cell numeric>{team.losses}</Table.Cell>
 									<Table.Cell numeric>{team.ties}</Table.Cell>
