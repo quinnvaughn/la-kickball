@@ -7,6 +7,7 @@ import { LeagueLocationLink } from "#/components/leagues/league-location-link"
 import { FreeAgentsTab } from "#/components/seasons/free-agents-tab"
 import { RegisterTab } from "#/components/seasons/register-tab"
 import { RegistrationPricing } from "#/components/seasons/registration-pricing"
+import { ScheduleTab } from "#/components/seasons/schedule-tab"
 import { StandingsTab } from "#/components/seasons/standings-tab"
 import {
 	formatDayOfTheWeek,
@@ -15,6 +16,7 @@ import {
 	getSeasonProgressLabel,
 	getSeasonTabs,
 } from "#/components/seasons/utils"
+import { Badge } from "#/components/ui/badge"
 import { Breadcrumb } from "#/components/ui/breadcrumb"
 import { PageContainer } from "#/components/ui/page-container"
 import { Tabs } from "#/components/ui/tabs"
@@ -83,25 +85,13 @@ function RouteComponent() {
 							>
 								{season.name}
 							</h1>
-							<div
-								className={css({
-									fontFamily: "label",
-									fontSize: "xs",
-									textTransform: "uppercase",
-									letterSpacing: "wider",
-									color: "teal.dark",
-									background: "rgba(0,169,157,0.12)",
-									py: "2",
-									px: "4",
-									borderRadius: "full",
-									whiteSpace: "nowrap",
-									alignSelf: "flex-start",
-								})}
-							>
-								{season.startDate
-									? getSeasonProgressLabel(season.startDate, season.weeks)
-									: "Start date TBD"}
-							</div>
+							<Badge
+								text={
+									season.startDate
+										? getSeasonProgressLabel(season.startDate, season.weeks)
+										: "Start date TBD"
+								}
+							/>
 						</HStack>
 						<div className={css({ color: "subtitle" })}>
 							<LeagueLocationLink
@@ -155,6 +145,17 @@ function RouteComponent() {
 							standings={season.standings}
 							league={league}
 							season={seasonSlug}
+						/>
+					))
+					.with("schedule", () => (
+						<ScheduleTab
+							season={season.slug}
+							league={{
+								location: season.league.locationName,
+								slug: season.league.slug,
+							}}
+							schedule={season.schedule}
+							seasonStart={season.startDate}
 						/>
 					))
 					.otherwise(() => null)}

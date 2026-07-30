@@ -93,6 +93,8 @@ CREATE OR REPLACE FUNCTION pg_temp.seed_season(
 	p_completed_weeks int,
 	p_add_playoffs boolean, -- true = regular season done, semis played, final scheduled but not yet played
 	p_final_played boolean, -- true = final has also been played and the season winner recorded
+	p_post_next_week boolean, -- true = the week right after p_completed_weeks gets matchups posted (no scores/logs yet)
+	p_suspend_first_game boolean, -- true = week 1's first game is suspended (rained out early) instead of completed
 	p_team_names text[],
 	p_player_pool uuid[],
 	p_ref_pool uuid[]
@@ -116,6 +118,21 @@ DECLARE
 	away_score int;
 	ref_id uuid;
 	pairing_sets int[][] := ARRAY[ARRAY[1,2,3,4], ARRAY[1,3,2,4], ARRAY[1,4,2,3]];
+	-- Standard 6-team round-robin (circle method): 5 rounds, 3 pairs each,
+	-- every team plays every other team exactly once across the 5 rounds.
+	pairing_sets_6 int[][] := ARRAY[
+		ARRAY[1,6,2,5,3,4],
+		ARRAY[1,5,6,4,2,3],
+		ARRAY[1,4,5,3,6,2],
+		ARRAY[1,3,4,2,5,6],
+		ARRAY[1,2,3,6,4,5]
+	];
+	active_pairing_sets int[][];
+	round_count int;
+	num_games int;
+	home_roster uuid[];
+	away_roster uuid[];
+	p1_batter uuid;
 	set_idx int;
 	semi1_winner uuid;
 	semi2_winner uuid;
@@ -128,6 +145,15 @@ DECLARE
 	mvp_candidate uuid;
 BEGIN
 	SELECT * INTO v_season FROM seasons WHERE id = p_season_id;
+
+	IF p_team_count = 6 THEN
+		active_pairing_sets := pairing_sets_6;
+		round_count := 5;
+	ELSE
+		active_pairing_sets := pairing_sets;
+		round_count := 3;
+	END IF;
+	num_games := p_team_count / 2;
 
 	FOR t IN 1..p_team_count LOOP
 		team_id := gen_random_uuid();
@@ -160,46 +186,181 @@ BEGIN
 		INSERT INTO weeks (id, season_id, week_number, date) VALUES (week_id, p_season_id, w, week_date);
 
 		IF w <= p_completed_weeks THEN
-			set_idx := ((w - 1) % 3) + 1;
+			set_idx := ((w - 1) % round_count) + 1;
 
-			FOR g IN 1..2 LOOP
-				IF g = 1 THEN
-					home_idx := pairing_sets[set_idx][1];
-					away_idx := pairing_sets[set_idx][2];
-				ELSE
-					home_idx := pairing_sets[set_idx][3];
-					away_idx := pairing_sets[set_idx][4];
-				END IF;
+			FOR g IN 1..num_games LOOP
+				home_idx := active_pairing_sets[set_idx][(g - 1) * 2 + 1];
+				away_idx := active_pairing_sets[set_idx][(g - 1) * 2 + 2];
 
 				home_team := team_ids[home_idx];
 				away_team := team_ids[away_idx];
 				ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
 
-				LOOP
-					home_score := 3 + floor(random() * 13)::int;
-					away_score := 3 + floor(random() * 13)::int;
-					EXIT WHEN home_score <> away_score;
-				END LOOP;
-
 				game_id := gen_random_uuid();
-				INSERT INTO games (
-					id, week_id, home_team_id, away_team_id, round, field,
-					start_time, home_score, away_score, ref_id
-				) VALUES (
-					game_id, week_id, home_team, away_team, 'regular',
-					CASE WHEN g = 1 THEN 'Field 1' ELSE 'Field 2' END,
-					v_season.start_time, home_score, away_score, ref_id
-				);
 
-				PERFORM pg_temp.seed_game_logs(
-					game_id,
-					shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)]
-				);
-				PERFORM pg_temp.seed_game_logs(
-					game_id,
-					shuffled_players[((away_idx - 1) * p_roster_size + 1):(away_idx * p_roster_size)]
-				);
+				IF p_suspend_first_game AND w = 1 AND g = 1 THEN
+					-- Suspended: called off (rain) partway through the 2nd
+					-- inning, well under the 4-inning threshold, so this
+					-- score doesn't count and the game owes a full replay —
+					-- no ended_at, no box score. Lineups + a handful of
+					-- plays are still seeded (mirroring the in-progress
+					-- game below) so half/inning are derivable the same
+					-- way a live game's are, for the schedule tab.
+					home_roster := shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)];
+					away_roster := shuffled_players[((away_idx - 1) * p_roster_size + 1):(away_idx * p_roster_size)];
+
+					INSERT INTO games (
+						id, week_id, home_team_id, away_team_id, round, field,
+						start_time, home_score, away_score, suspended_at, ref_id
+					) VALUES (
+						game_id, week_id, home_team, away_team, 'regular',
+						'Field ' || g,
+						v_season.start_time, 2, 1,
+						(week_date + v_season.start_time) + interval '35 minutes', ref_id
+					);
+
+					FOR t IN 1..p_roster_size LOOP
+						INSERT INTO lineup_entries (id, game_id, team_id, user_id, batting_order)
+						VALUES (gen_random_uuid(), game_id, home_team, home_roster[t], t);
+						INSERT INTO lineup_entries (id, game_id, team_id, user_id, batting_order)
+						VALUES (gen_random_uuid(), game_id, away_team, away_roster[t], t);
+					END LOOP;
+
+					-- Top 1: away leads off with a single, then a single
+					-- scores her (1-0 away).
+					p1_batter := away_roster[1];
+					INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
+					VALUES (gen_random_uuid(), game_id, 1, p1_batter, 'single', 0, 1, '[]');
+					INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
+					VALUES (
+						gen_random_uuid(), game_id, 2, away_roster[2], 'single', 0, 1,
+						jsonb_build_array(jsonb_build_object('runnerId', p1_batter, 'fromBase', 1, 'result', 'scored'))
+					);
+
+					-- Bottom 1: home answers with back-to-back homers (2-1 home).
+					INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
+					VALUES (gen_random_uuid(), game_id, 3, home_roster[1], 'homer', 1, 1, '[]');
+					INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
+					VALUES (gen_random_uuid(), game_id, 4, home_roster[2], 'homer', 1, 1, '[]');
+
+					-- Top 2: one out, then the rain stops play.
+					INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
+					VALUES (gen_random_uuid(), game_id, 5, away_roster[3], 'out', 0, 2, '[]');
+				ELSE
+					LOOP
+						home_score := 3 + floor(random() * 13)::int;
+						away_score := 3 + floor(random() * 13)::int;
+						EXIT WHEN home_score <> away_score;
+					END LOOP;
+
+					INSERT INTO games (
+						id, week_id, home_team_id, away_team_id, round, field,
+						start_time, home_score, away_score, ended_at, ref_id
+					) VALUES (
+						game_id, week_id, home_team, away_team, 'regular',
+						'Field ' || g,
+						v_season.start_time, home_score, away_score,
+						(week_date + v_season.start_time) + interval '2 hours', ref_id
+					);
+
+					PERFORM pg_temp.seed_game_logs(
+						game_id,
+						shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)]
+					);
+					PERFORM pg_temp.seed_game_logs(
+						game_id,
+						shuffled_players[((away_idx - 1) * p_roster_size + 1):(away_idx * p_roster_size)]
+					);
+				END IF;
 			END LOOP;
+		ELSIF p_post_next_week AND w = p_completed_weeks + 1 THEN
+			-- This week mixes three game states so the schedule tab (and
+			-- ref tooling) has one of each to exercise: a game that hasn't
+			-- started, one that's finished, and one that's mid-play with a
+			-- couple of logged plays and lineups set. Assumes 6 teams
+			-- (three games) — this branch is only ever reached by the
+			-- active season, which is seeded with p_team_count = 6.
+			set_idx := ((w - 1) % round_count) + 1;
+
+			-- Game 1: upcoming — matchup posted, nothing played yet.
+			home_idx := active_pairing_sets[set_idx][1];
+			away_idx := active_pairing_sets[set_idx][2];
+			ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+
+			INSERT INTO games (
+				id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id
+			) VALUES (
+				gen_random_uuid(), week_id, team_ids[home_idx], team_ids[away_idx], 'regular',
+				'Field 1', v_season.start_time, ref_id
+			);
+
+			-- Game 2: completed — final score, box score stats, ended_at set.
+			home_idx := active_pairing_sets[set_idx][3];
+			away_idx := active_pairing_sets[set_idx][4];
+			ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+
+			LOOP
+				home_score := 3 + floor(random() * 13)::int;
+				away_score := 3 + floor(random() * 13)::int;
+				EXIT WHEN home_score <> away_score;
+			END LOOP;
+
+			game_id := gen_random_uuid();
+			INSERT INTO games (
+				id, week_id, home_team_id, away_team_id, round, field,
+				start_time, home_score, away_score, ended_at, ref_id
+			) VALUES (
+				game_id, week_id, team_ids[home_idx], team_ids[away_idx], 'regular',
+				'Field 2', v_season.start_time, home_score, away_score,
+				(week_date + v_season.start_time) + interval '2 hours', ref_id
+			);
+
+			PERFORM pg_temp.seed_game_logs(
+				game_id,
+				shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)]
+			);
+			PERFORM pg_temp.seed_game_logs(
+				game_id,
+				shuffled_players[((away_idx - 1) * p_roster_size + 1):(away_idx * p_roster_size)]
+			);
+
+			-- Game 3: in progress — lineups set, a couple of plays logged,
+			-- no final score yet. homeScore/awayScore reflect exactly what
+			-- those two plays produced, same as the live-scoring model
+			-- (games.homeScore/awayScore are kept in sync as plays land,
+			-- not typed in after the fact).
+			home_idx := active_pairing_sets[set_idx][5];
+			away_idx := active_pairing_sets[set_idx][6];
+			ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+			home_roster := shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)];
+			away_roster := shuffled_players[((away_idx - 1) * p_roster_size + 1):(away_idx * p_roster_size)];
+
+			game_id := gen_random_uuid();
+			INSERT INTO games (
+				id, week_id, home_team_id, away_team_id, round, field,
+				start_time, home_score, away_score, ref_id
+			) VALUES (
+				game_id, week_id, team_ids[home_idx], team_ids[away_idx], 'regular',
+				'Field 3', v_season.start_time, 0, 1, ref_id
+			);
+
+			FOR t IN 1..p_roster_size LOOP
+				INSERT INTO lineup_entries (id, game_id, team_id, user_id, batting_order)
+				VALUES (gen_random_uuid(), game_id, team_ids[home_idx], home_roster[t], t);
+				INSERT INTO lineup_entries (id, game_id, team_id, user_id, batting_order)
+				VALUES (gen_random_uuid(), game_id, team_ids[away_idx], away_roster[t], t);
+			END LOOP;
+
+			-- Away leads off, singles; next batter doubles her in.
+			p1_batter := away_roster[1];
+			INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
+			VALUES (gen_random_uuid(), game_id, 1, p1_batter, 'single', 0, 1, '[]');
+
+			INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
+			VALUES (
+				gen_random_uuid(), game_id, 2, away_roster[2], 'double', 0, 1,
+				jsonb_build_array(jsonb_build_object('runnerId', p1_batter, 'fromBase', 1, 'result', 'scored'))
+			);
 		END IF;
 	END LOOP;
 
@@ -231,8 +392,8 @@ BEGIN
 			EXIT WHEN home_score <> away_score;
 		END LOOP;
 		semi1_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ref_id)
-		VALUES (semi1_id, week_id, team_ids[1], team_ids[2], 'semifinal', 'Field 1', v_season.start_time, home_score, away_score, ref_id);
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
+		VALUES (semi1_id, week_id, team_ids[1], team_ids[2], 'semifinal', 'Field 1', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
 		semi1_winner_idx := CASE WHEN home_score > away_score THEN 1 ELSE 2 END;
 		semi1_winner := team_ids[semi1_winner_idx];
 		PERFORM pg_temp.seed_game_logs(semi1_id, shuffled_players[1:p_roster_size]);
@@ -245,8 +406,8 @@ BEGIN
 			EXIT WHEN home_score <> away_score;
 		END LOOP;
 		semi2_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ref_id)
-		VALUES (semi2_id, week_id, team_ids[3], team_ids[4], 'semifinal', 'Field 2', v_season.start_time, home_score, away_score, ref_id);
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
+		VALUES (semi2_id, week_id, team_ids[3], team_ids[4], 'semifinal', 'Field 2', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
 		semi2_winner_idx := CASE WHEN home_score > away_score THEN 3 ELSE 4 END;
 		semi2_winner := team_ids[semi2_winner_idx];
 		PERFORM pg_temp.seed_game_logs(semi2_id, shuffled_players[(2 * p_roster_size + 1):(3 * p_roster_size)]);
@@ -270,8 +431,8 @@ BEGIN
 				EXIT WHEN home_score <> away_score;
 			END LOOP;
 
-			INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ref_id)
-			VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, home_score, away_score, ref_id);
+			INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
+			VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
 
 			final_winner := CASE WHEN home_score > away_score THEN semi1_winner ELSE semi2_winner END;
 			PERFORM pg_temp.seed_game_logs(
@@ -313,7 +474,7 @@ DECLARE
 	first_names text[] := ARRAY['Alex','Jordan','Taylor','Morgan','Casey','Riley','Jamie','Cameron','Avery','Quinn','Drew','Reese','Rowan','Skyler','Dakota','Emerson','Finley','Hayden','Kendall','Peyton'];
 	last_names text[] := ARRAY['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Wilson','Anderson','Thomas','Clark','Moore','Jackson','Martin','Lee'];
 	playoffs_team_names text[] := ARRAY['Sole Purpose','Kicked Out','Punt Intended','Kick-Ass Krew'];
-	active_team_names text[] := ARRAY['The Base Invaders','Sneaker Squad','Rubber Ballers','The Diamond Divas'];
+	active_team_names text[] := ARRAY['The Base Invaders','Sneaker Squad','Rubber Ballers','The Diamond Divas','Sole Crushers','Turf Titans'];
 	soon_team_names text[] := ARRAY['Kick Start','Early Birds','Fresh Kicks','Warm-Up Act'];
 	future_team_names text[] := ARRAY['Turf Wars','Home Run Kickers','Cleat Street','Grass Stains'];
 	completed_team_names text[] := ARRAY['Kickin'' Chicken','Foul Balls','The Kick-Offs','Ball Busters'];
@@ -456,19 +617,25 @@ BEGIN
 
 	-- Future: registration open, no teams have registered yet — exercises
 	-- the "no registered teams" empty state on the standings/teams tabs.
-	PERFORM pg_temp.seed_season(v_future_id, 0, 10, 8, 0, false, false, future_team_names, player_pool, ref_pool);
+	PERFORM pg_temp.seed_season(v_future_id, 0, 10, 8, 0, false, false, false, false, future_team_names, player_pool, ref_pool);
 
 	-- Starting soon: registration open, kicks off within the next two weeks.
-	PERFORM pg_temp.seed_season(v_soon_id, 4, 10, 8, 0, false, false, soon_team_names, player_pool, ref_pool);
+	PERFORM pg_temp.seed_season(v_soon_id, 4, 10, 8, 0, false, false, false, false, soon_team_names, player_pool, ref_pool);
 
-	-- Active: partway through an 8-week regular season (3 weeks played).
-	PERFORM pg_temp.seed_season(v_active_id, 4, 10, 8, 3, false, false, active_team_names, player_pool, ref_pool);
+	-- Active: partway through an 8-week regular season (3 weeks played),
+	-- 6 teams so this week has 3 games — one upcoming, one completed, and
+	-- one in progress (lineups set, a couple of plays logged) so the
+	-- schedule tab and ref tooling both have a live case to exercise.
+	-- Roster size is 8 (not the usual 10) so 6 teams still fit the shared
+	-- 56-player pool. Week 1's first game is suspended (rained out early)
+	-- so there's a real example of that status in a past week.
+	PERFORM pg_temp.seed_season(v_active_id, 6, 8, 8, 3, false, false, true, true, active_team_names, player_pool, ref_pool);
 
 	-- Playoffs: regular season complete, semifinals played, final scheduled but not played.
-	PERFORM pg_temp.seed_season(v_playoffs_id, 4, 10, 8, 8, true, false, playoffs_team_names, player_pool, ref_pool);
+	PERFORM pg_temp.seed_season(v_playoffs_id, 4, 10, 8, 8, true, false, false, false, playoffs_team_names, player_pool, ref_pool);
 
 	-- Completed: entire season including the final has been played, winner recorded.
-	PERFORM pg_temp.seed_season(v_completed_id, 4, 10, 8, 8, true, true, completed_team_names, player_pool, ref_pool);
+	PERFORM pg_temp.seed_season(v_completed_id, 4, 10, 8, 8, true, true, false, false, completed_team_names, player_pool, ref_pool);
 
 	-- Two players who've never suited up anywhere — kept out of
 	-- player_pool above so they never land on a roster or in game_logs.

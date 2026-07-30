@@ -98,7 +98,7 @@ export function StandingsTab({ standings, league, season }: Props) {
 								<Table.Row key={team.teamId}>
 									<Table.Cell>
 										<Link
-											to="/leagues/$league/$season/$teamId"
+											to="/leagues/$league/$season/team/$teamId"
 											params={{ league, season, teamId: team.teamId }}
 											className={css({
 												fontWeight: "bold",

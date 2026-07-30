@@ -14,6 +14,11 @@ import {
 	getCaptainTeamIdForUser,
 	isUserRegisteredForSeason,
 } from "../domain/registration"
+import {
+	buildSchedule,
+	getGameStatus,
+	type ScheduleWeek,
+} from "../domain/schedule"
 import { formatSeasonName } from "../domain/seasons"
 import { computeStandings } from "../domain/standings"
 import {
@@ -151,8 +156,10 @@ async function currentWeekForSeason(seasonId: string) {
 }
 
 // Completed regular-season games for a season — playoff rounds and
-// rainouts/upcoming games (unset scores) are excluded since they shouldn't
-// factor into the standings computation in domain/standings.ts.
+// suspended/upcoming games (unset scores) are excluded since they shouldn't
+// factor into the standings computation in domain/standings.ts. A
+// suspended game still owes a makeup, so its current score doesn't count
+// yet either.
 async function completedRegularSeasonGamesForSeason(seasonId: string) {
 	return db
 		.select({
@@ -169,9 +176,66 @@ async function completedRegularSeasonGamesForSeason(seasonId: string) {
 				eq(games.round, "regular"),
 				isNotNull(games.homeScore),
 				isNotNull(games.awayScore),
-				isNull(games.cancelledAt),
+				isNull(games.suspendedAt),
 			),
 		)
+}
+
+// Every week in the season with its games (and each game's team names)
+// attached, ordered by week number — the raw material for the schedule
+// tab. Playoff weeks are included same as regular ones; round-specific
+// filtering is a UI concern, not a query one.
+async function weeksWithGamesForSeason(
+	seasonId: string,
+): Promise<ScheduleWeek[]> {
+	const rows = await db.query.weeks.findMany({
+		where: { seasonId: { eq: seasonId } },
+		orderBy: { weekNumber: "asc" },
+		with: {
+			games: {
+				with: {
+					homeTeam: true,
+					awayTeam: true,
+					// homeScore/awayScore are already kept live by whatever logs
+					// a play, so the only reason to fetch plays here is the most
+					// recent one's half/inning, for a game in progress.
+					plays: {
+						columns: { id: true, half: true, inning: true },
+						orderBy: { sequence: "desc" },
+						limit: 1,
+					},
+				},
+			},
+		},
+	})
+
+	return rows.map((week) => ({
+		id: week.id,
+		weekNumber: week.weekNumber,
+		date: week.date,
+		games: week.games.map((game) => ({
+			id: game.id,
+			round: game.round,
+			field: game.field,
+			startTime: game.startTime,
+			homeTeamId: game.homeTeamId,
+			// homeTeamId/awayTeamId are notNull FKs, so these relations are
+			// always populated — same guarantee completedGames leans on below.
+			homeTeamName: (game.homeTeam as { name: string }).name,
+			awayTeamId: game.awayTeamId,
+			awayTeamName: (game.awayTeam as { name: string }).name,
+			homeScore: game.homeScore,
+			awayScore: game.awayScore,
+			suspendedAt: game.suspendedAt,
+			status: getGameStatus({
+				suspendedAt: game.suspendedAt,
+				endedAt: game.endedAt,
+				hasPlays: game.plays.length > 0,
+			}),
+			half: game.plays[0]?.half ?? null,
+			inning: game.plays[0]?.inning ?? null,
+		})),
+	}))
 }
 
 async function weeklySubUserIdsForWeek(weekId: string): Promise<string[]> {
@@ -217,6 +281,7 @@ export const seasonsRouter = router({
 				freeAgentUserIds,
 				currentWeek,
 				completedGames,
+				scheduleWeeks,
 			] = await Promise.all([
 				ctx.user
 					? isUserRegisteredForSeason(ctx.user.id, season.id)
@@ -227,6 +292,7 @@ export const seasonsRouter = router({
 				freeAgentUserIdsForSeason(season.id),
 				currentWeekForSeason(season.id),
 				completedRegularSeasonGamesForSeason(season.id),
+				weeksWithGamesForSeason(season.id),
 			])
 
 			const weeklySubUserIds = currentWeek
@@ -261,6 +327,7 @@ export const seasonsRouter = router({
 					players: weeklySubs,
 				},
 				standings,
+				schedule: buildSchedule(scheduleWeeks),
 			}
 		}),
 })

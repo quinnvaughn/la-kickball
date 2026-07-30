@@ -1,0 +1,1 @@
+ALTER TABLE "games" RENAME COLUMN "cancelled_at" TO "suspended_at";
