@@ -22,7 +22,6 @@ import { WeeklySubsTab } from "#/components/seasons/weekly-subs-tab"
 import { Badge } from "#/components/ui/badge"
 import { Breadcrumb } from "#/components/ui/breadcrumb"
 import { PageContainer } from "#/components/ui/page-container"
-import { SectionBlock } from "#/components/ui/section-block"
 import { Tabs } from "#/components/ui/tabs"
 import { ROSTER_MINIMUM } from "#/server/domain/seasons"
 
