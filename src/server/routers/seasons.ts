@@ -313,6 +313,11 @@ async function weeksWithGamesForSeason(
 						orderBy: { sequence: "desc" },
 						limit: 1,
 					},
+					// Just enough to know, per side, whether a lineup exists at
+					// all — drives the captain-facing "Set lineup" prompt.
+					lineupEntries: {
+						columns: { teamId: true },
+					},
 				},
 			},
 		},
@@ -352,6 +357,12 @@ async function weeksWithGamesForSeason(
 			}),
 			half: game.plays[0]?.half ?? null,
 			inning: game.plays[0]?.inning ?? null,
+			homeLineupSet: game.lineupEntries.some(
+				(entry) => entry.teamId === game.homeTeamId,
+			),
+			awayLineupSet: game.lineupEntries.some(
+				(entry) => entry.teamId === game.awayTeamId,
+			),
 		})),
 	}))
 }

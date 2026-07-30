@@ -11,9 +11,16 @@ type Props = {
 	season: string
 	week: ScheduleWeek
 	currentWeekId: string | null
+	captainTeamId: string | null
 }
 
-export function WeekGroup({ league, season, week, currentWeekId }: Props) {
+export function WeekGroup({
+	league,
+	season,
+	week,
+	currentWeekId,
+	captainTeamId,
+}: Props) {
 	const isCurrentWeek = currentWeekId === week.id
 	return (
 		<details
@@ -63,7 +70,13 @@ export function WeekGroup({ league, season, week, currentWeekId }: Props) {
 					</Grid>
 				)}
 				{week.games.map((g) => (
-					<WeekGameCard game={g} key={g.id} league={league} season={season} />
+					<WeekGameCard
+						game={g}
+						key={g.id}
+						league={league}
+						season={season}
+						captainTeamId={captainTeamId}
+					/>
 				))}
 			</Grid>
 		</details>

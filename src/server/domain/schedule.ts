@@ -41,6 +41,10 @@ export interface ScheduleGame {
 	awayScore: number | null
 	suspendedAt: Date | null
 	status: GameStatus
+	// Whether each team has any lineup_entries rows for this game yet — all
+	// a captain needs to see their own "Set lineup" prompt on the schedule.
+	homeLineupSet: boolean
+	awayLineupSet: boolean
 	// Only meaningful while status is "in_progress" — the half/inning of
 	// the most recently logged play. Null once there are no plays yet, or
 	// no longer relevant once the game is completed/cancelled.

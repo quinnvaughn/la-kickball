@@ -11,9 +11,16 @@ type Props = {
 	seasonStart: string | null
 	season: string
 	league: { location: string; slug: string }
+	captainTeamId: string | null
 }
 
-export function ScheduleTab({ schedule, seasonStart, season, league }: Props) {
+export function ScheduleTab({
+	schedule,
+	seasonStart,
+	season,
+	league,
+	captainTeamId,
+}: Props) {
 	if (schedule.weeks.length === 0) {
 		const seasonStartFormatted = seasonStart
 			? DateTime.fromISO(seasonStart).toFormat("LLL dd")
@@ -42,6 +49,7 @@ export function ScheduleTab({ schedule, seasonStart, season, league }: Props) {
 					season={season}
 					week={w}
 					currentWeekId={schedule.currentWeekId}
+					captainTeamId={captainTeamId}
 				/>
 			))}
 		</SectionBlock>

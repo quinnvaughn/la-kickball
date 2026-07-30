@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router"
 import { DateTime } from "luxon"
-import { useState } from "react"
 import { css } from "styled-system/css"
 import { VStack } from "styled-system/jsx"
 import type { ScheduleGame } from "#/server/domain/schedule"
@@ -10,6 +9,7 @@ type Props = {
 	game: ScheduleGame
 	league: { location: string; slug: string }
 	season: string
+	captainTeamId: string | null
 }
 
 const ordinalRules = new Intl.PluralRules("en-US", { type: "ordinal" })
@@ -31,8 +31,13 @@ function formatHalfInning(game: ScheduleGame) {
 	return `${game.half === 0 ? "Top" : "Bottom"} ${formatInning(game.inning)}`
 }
 
-export function WeekGameCard({ game, league, season }: Props) {
-	const [isHovering, setIsHovering] = useState(false)
+export function WeekGameCard({ game, league, season, captainTeamId }: Props) {
+	// Only upcoming games take a lineup submission — once a game has
+	// started/ended, whatever lineup exists (or doesn't) is locked in.
+	const myLineupIsUnset =
+		game.status === "upcoming" &&
+		((captainTeamId === game.homeTeamId && !game.homeLineupSet) ||
+			(captainTeamId === game.awayTeamId && !game.awayLineupSet))
 
 	function isAwayBold(game: ScheduleGame) {
 		return (
@@ -59,11 +64,7 @@ export function WeekGameCard({ game, league, season }: Props) {
 	}
 
 	return (
-		<Link
-			onMouseEnter={() => setIsHovering(true)}
-			onMouseLeave={() => setIsHovering(false)}
-			to="/leagues/$league/$season/game/$gameId"
-			params={{ league: league.slug, season, gameId: game.id }}
+		<div
 			className={css({
 				display: "flex",
 				justifyContent: "space-between",
@@ -109,7 +110,6 @@ export function WeekGameCard({ game, league, season }: Props) {
 					className={css({
 						fontFamily: "heading",
 						color: "purple.dark",
-						textDecoration: isHovering ? "underline" : "none",
 					})}
 				>
 					<span
@@ -139,7 +139,9 @@ export function WeekGameCard({ game, league, season }: Props) {
 				</div>
 			</VStack>
 			{game.status === "in_progress" && (
-				<div
+				<Link
+					to="/leagues/$league/$season/game/$gameId"
+					params={{ league: league.slug, season, gameId: game.id }}
 					className={css({
 						fontFamily: "heading",
 						fontWeight: "700",
@@ -147,14 +149,36 @@ export function WeekGameCard({ game, league, season }: Props) {
 						color: "teal.dark",
 						whiteSpace: "nowrap",
 						flexShrink: 0,
-						textDecoration: isHovering ? "underline" : "none",
+						_hover: { textDecoration: "underline" },
 					})}
 				>
 					Follow live →
-				</div>
+				</Link>
+			)}
+			{myLineupIsUnset && (
+				<Link
+					to="/leagues/$league/$season/game/$gameId"
+					params={{ league: league.slug, season, gameId: game.id }}
+					className={css({
+						fontFamily: "heading",
+						fontWeight: "700",
+						fontSize: "sm",
+						background: "coral",
+						color: "sand",
+						py: "2",
+						px: "4",
+						borderRadius: "full",
+						whiteSpace: "nowrap",
+						_hover: { textDecoration: "underline" },
+					})}
+				>
+					Set lineup →
+				</Link>
 			)}
 			{(game.status === "completed" || game.status === "suspended") && (
-				<div
+				<Link
+					to="/leagues/$league/$season/game/$gameId"
+					params={{ league: league.slug, season, gameId: game.id }}
 					className={css({
 						fontFamily: "label",
 						fontSize: "lg",
@@ -163,6 +187,9 @@ export function WeekGameCard({ game, league, season }: Props) {
 						px: "3",
 						borderRadius: "xl",
 						color: "purple.dark",
+						_hover: {
+							textDecoration: "underline",
+						},
 					})}
 				>
 					<span
@@ -180,8 +207,8 @@ export function WeekGameCard({ game, league, season }: Props) {
 					>
 						{game.homeScore}
 					</span>
-				</div>
+				</Link>
 			)}
-		</Link>
+		</div>
 	)
 }

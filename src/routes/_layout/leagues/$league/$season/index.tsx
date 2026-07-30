@@ -157,6 +157,7 @@ function RouteComponent() {
 							}}
 							schedule={season.schedule}
 							seasonStart={season.startDate}
+							captainTeamId={season.myCaptainTeamId}
 						/>
 					))
 					.with("weekly-subs", () => (
