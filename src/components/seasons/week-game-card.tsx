@@ -3,7 +3,6 @@ import { DateTime } from "luxon"
 import { useState } from "react"
 import { css } from "styled-system/css"
 import { VStack } from "styled-system/jsx"
-import { match } from "ts-pattern"
 import type { ScheduleGame } from "#/server/domain/schedule"
 import { Badge } from "../ui/badge"
 
@@ -34,6 +33,31 @@ function formatHalfInning(game: ScheduleGame) {
 
 export function WeekGameCard({ game, league, season }: Props) {
 	const [isHovering, setIsHovering] = useState(false)
+
+	function isAwayBold(game: ScheduleGame) {
+		return (
+			game.status !== "completed" ||
+			(game.status === "completed" &&
+				game.awayScore &&
+				game.homeScore &&
+				game.awayScore > game.homeScore)
+		)
+	}
+
+	function isMiddleBold(game: ScheduleGame) {
+		return game.status !== "completed"
+	}
+
+	function isHomeBold(game: ScheduleGame) {
+		return (
+			game.status !== "completed" ||
+			(game.status === "completed" &&
+				game.awayScore &&
+				game.homeScore &&
+				game.homeScore > game.awayScore)
+		)
+	}
+
 	return (
 		<Link
 			onMouseEnter={() => setIsHovering(true)}
@@ -84,12 +108,31 @@ export function WeekGameCard({ game, league, season }: Props) {
 				<div
 					className={css({
 						fontFamily: "heading",
-						fontWeight: "bold",
 						color: "purple.dark",
 						textDecoration: isHovering ? "underline" : "none",
 					})}
 				>
-					{game.awayTeamName} vs. {game.homeTeamName}
+					<span
+						className={css({
+							fontWeight: isAwayBold(game) ? "bold" : "normal",
+						})}
+					>
+						{game.awayTeamName}
+					</span>
+					<span
+						className={css({
+							fontWeight: isMiddleBold(game) ? "bold" : "normal",
+						})}
+					>
+						{" vs. "}
+					</span>
+					<span
+						className={css({
+							fontWeight: isHomeBold(game) ? "bold" : "normal",
+						})}
+					>
+						{game.homeTeamName}
+					</span>
 				</div>
 				<div className={css({ color: "subtitle", fontSize: "sm" })}>
 					{league.location}, {game.field}
@@ -114,7 +157,6 @@ export function WeekGameCard({ game, league, season }: Props) {
 				<div
 					className={css({
 						fontFamily: "label",
-						fontWeight: "700",
 						fontSize: "lg",
 						background: "sand",
 						py: "2",
@@ -123,7 +165,21 @@ export function WeekGameCard({ game, league, season }: Props) {
 						color: "purple.dark",
 					})}
 				>
-					{game.awayScore} - {game.homeScore}
+					<span
+						className={css({
+							fontWeight: isAwayBold(game) ? "bold" : "normal",
+						})}
+					>
+						{game.awayScore}
+					</span>
+					{" - "}
+					<span
+						className={css({
+							fontWeight: isHomeBold(game) ? "bold" : "normal",
+						})}
+					>
+						{game.homeScore}
+					</span>
 				</div>
 			)}
 		</Link>
