@@ -29,6 +29,26 @@ RETURNS season_name LANGUAGE sql AS $fn$
 	];
 $fn$;
 
+-- The date matching p_weekday within the same Sunday-Saturday span as
+-- p_ref_date, regardless of which weekday p_ref_date itself falls on. Same
+-- Sunday-anchoring trick as currentWeekForSeason (routers/seasons.ts) and
+-- buildSchedule (domain/schedule.ts): date_trunc('week', ...) truncates to
+-- Monday, so shifting the input forward a day before truncating (and back
+-- a day after) turns that into the Sunday that starts p_ref_date's week.
+CREATE OR REPLACE FUNCTION pg_temp.week_anchor(p_ref_date date, p_weekday text)
+RETURNS date LANGUAGE sql AS $fn$
+	SELECT (date_trunc('week', p_ref_date + 1) - interval '1 day')::date
+		+ (CASE lower(p_weekday)
+			WHEN 'sunday' THEN 0
+			WHEN 'monday' THEN 1
+			WHEN 'tuesday' THEN 2
+			WHEN 'wednesday' THEN 3
+			WHEN 'thursday' THEN 4
+			WHEN 'friday' THEN 5
+			WHEN 'saturday' THEN 6
+		END);
+$fn$;
+
 CREATE OR REPLACE FUNCTION pg_temp.seed_game_logs(p_game_id uuid, p_roster uuid[])
 RETURNS void LANGUAGE plpgsql AS $fn$
 DECLARE
@@ -489,12 +509,22 @@ DECLARE
 
 	-- Every season's lifecycle stage is defined purely as an offset from
 	-- today, so re-running this script always reproduces the same five
-	-- stages relative to "now".
-	v_future_start date := CURRENT_DATE + 75; -- registration open, well out
-	v_soon_start date := CURRENT_DATE + 9; -- registration open, starts within 2 weeks
-	v_active_start date := CURRENT_DATE - 24; -- 3 weeks into an 8-week regular season
-	v_playoffs_start date := CURRENT_DATE - 59; -- regular season done, mid-playoffs
-	v_completed_start date := CURRENT_DATE - 120; -- entire season + playoffs long finished
+	-- stages relative to "now" — "today" meaning the current date in LA,
+	-- where the league actually plays, not whatever timezone the DB
+	-- session happens to be in. Each start date is then snapped onto the
+	-- season's own day_of_week (set below, per season) via week_anchor, so
+	-- games land on the weekday they're supposed to instead of whatever
+	-- weekday a raw "N days ago" offset happened to fall on.
+	v_today date := (now() AT TIME ZONE 'America/Los_Angeles')::date;
+	v_future_start date := pg_temp.week_anchor(v_today + 75, 'sunday'); -- registration open, well out
+	v_soon_start date := pg_temp.week_anchor(v_today + 9, 'wednesday'); -- registration open, starts within 2 weeks
+	-- Week 4's date (v_active_start + 21) lands on the Saturday within
+	-- today's own Sunday-Saturday span, so it's the one the schedule tab
+	-- badges "this week" — matching p_completed_weeks=3/p_post_next_week=true
+	-- below, which seeds week 4 as the in-progress one.
+	v_active_start date := pg_temp.week_anchor(v_today, 'saturday') - 21; -- 3 weeks into an 8-week regular season
+	v_playoffs_start date := pg_temp.week_anchor(v_today - 59, 'saturday'); -- regular season done, mid-playoffs
+	v_completed_start date := pg_temp.week_anchor(v_today - 120, 'sunday'); -- entire season + playoffs long finished
 
 	first_names text[] := ARRAY['Alex','Jordan','Taylor','Morgan','Casey','Riley','Jamie','Cameron','Avery','Quinn','Drew','Reese','Rowan','Skyler','Dakota','Emerson','Finley','Hayden','Kendall','Peyton'];
 	last_names text[] := ARRAY['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Wilson','Anderson','Thomas','Clark','Moore','Jackson','Martin','Lee'];

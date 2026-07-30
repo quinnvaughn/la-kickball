@@ -1,3 +1,4 @@
+import { DateTime } from "luxon"
 import type { gameRoundEnum } from "../db/schema/games"
 import type { PlayerTopStat } from "./stats"
 
@@ -85,13 +86,20 @@ export interface Schedule {
 	currentWeekId: string | null
 }
 
-// The week to default-open on the schedule tab — purely date-based: once a
-// week's date has arrived, it's "current" until the next dated week's date
-// arrives, regardless of whether its games actually finished (a suspended
-// game gets made up some other week, not necessarily this one, so game
-// completion has no bearing on this pick). Before the season's first dated
-// week, that first week is "current" instead. Undated weeks (schedule not
-// posted yet) are never picked.
+// The league plays in LA — week boundaries are LA calendar days regardless
+// of what timezone the server process happens to run in (prod runs in UTC).
+const LEAGUE_ZONE = "America/Los_Angeles"
+
+// The week whose date falls within the current Sunday-Saturday span — a
+// fixed calendar-week lookup, not tied to whichever weekday games are
+// actually played on (see currentWeekForSeason in routers/seasons.ts for
+// the same Sunday-anchored convention at the DB level, used for "available
+// this week" on the Weekly Subs tab). Nothing is "current" once today
+// falls outside every dated week's span — before the season starts, in a
+// gap between dated weeks, or after the season ends. Game completion has
+// no bearing on this pick (a suspended game gets made up some other week,
+// not necessarily this one). Undated weeks (schedule not posted yet) are
+// never picked.
 export function buildSchedule(
 	weeks: ScheduleWeek[],
 	now = new Date(),
@@ -100,18 +108,15 @@ export function buildSchedule(
 		(week): week is ScheduleWeek & { date: string } => week.date !== null,
 	)
 
-	const started = dated.filter((week) => new Date(week.date) <= now)
+	const nowDt = DateTime.fromJSDate(now, { zone: LEAGUE_ZONE })
+	// Luxon .weekday is ISO: Monday=1 ... Sunday=7. Sunday needs to stay put.
+	const startOfWeek = nowDt.startOf("day").minus({ days: nowDt.weekday % 7 })
+	const endOfWeek = startOfWeek.plus({ days: 6 }).endOf("day")
 
-	const currentWeek =
-		started.length > 0
-			? started.reduce((latest, week) =>
-					week.date > latest.date ? week : latest,
-				)
-			: dated.length > 0
-				? dated.reduce((earliest, week) =>
-						week.date < earliest.date ? week : earliest,
-					)
-				: undefined
+	const currentWeek = dated.find((week) => {
+		const weekDt = DateTime.fromISO(week.date, { zone: LEAGUE_ZONE })
+		return weekDt >= startOfWeek && weekDt <= endOfWeek
+	})
 
 	return { weeks, currentWeekId: currentWeek?.id ?? null }
 }
