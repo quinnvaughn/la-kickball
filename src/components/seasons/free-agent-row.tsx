@@ -1,19 +1,41 @@
 import { Link } from "@tanstack/react-router"
-import { css } from "styled-system/css"
+import { css, cx } from "styled-system/css"
 import { HStack, VStack } from "styled-system/jsx"
 import { openModal } from "#/lib/modal"
-import type { PlayerAvailabilitySummary } from "#/server/domain/stats"
+import type { FreeAgentListing } from "#/server/domain/stats"
 import { Badge } from "../ui/badge"
 import { formatUsersName } from "../user/utils"
 import { InviteFreeAgentModal } from "./invite-free-agent-modal"
 
 type Props = {
-	player: PlayerAvailabilitySummary
+	player: FreeAgentListing
 	type: "free-agent" | "weekly-sub"
 	// The team the current user captains this season, if any — the Invite
 	// button only shows up for captains, since only they can pick up subs.
 	captainTeamId: string | null
 }
+
+const baseButtonStyles = css({
+	fontFamily: "heading",
+	cursor: "pointer",
+	fontWeight: "700",
+	fontSize: "sm",
+	borderRadius: "full",
+	color: "sand",
+	whiteSpace: "nowrap",
+	py: "2",
+	px: "4",
+})
+
+const allowedButtonStyles = css({
+	background: { base: "coral", _hover: "coral.dark" },
+})
+
+const disabledButtonStyles = css({
+	background: "rgba(27,42,74,0.15)",
+	color: "rgba(27,42,74,0.5)",
+	cursor: "not-allowed",
+})
 
 export function FreeAgentRow({ player, type, captainTeamId }: Props) {
 	return (
@@ -66,6 +88,7 @@ export function FreeAgentRow({ player, type, captainTeamId }: Props) {
 					/>
 					{captainTeamId && (
 						<button
+							disabled={player.invited}
 							type="button"
 							onClick={() =>
 								openModal(
@@ -76,18 +99,10 @@ export function FreeAgentRow({ player, type, captainTeamId }: Props) {
 									/>,
 								)
 							}
-							className={css({
-								fontFamily: "heading",
-								background: { base: "coral", _hover: "coral.dark" },
-								cursor: "pointer",
-								fontWeight: "700",
-								fontSize: "sm",
-								borderRadius: "full",
-								color: "sand",
-								whiteSpace: "nowrap",
-								py: "2",
-								px: "4",
-							})}
+							className={cx(
+								baseButtonStyles,
+								player.invited ? disabledButtonStyles : allowedButtonStyles,
+							)}
 						>
 							Invite
 						</button>

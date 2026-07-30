@@ -1,13 +1,13 @@
 import { css } from "styled-system/css"
 import { Grid } from "styled-system/jsx"
 import { match } from "ts-pattern"
-import type { PlayerAvailabilitySummary } from "#/server/domain/stats"
+import type { FreeAgentListing } from "#/server/domain/stats"
 import { SectionBlock } from "../ui/section-block"
 import { EmptyTabContainer } from "./empty-tab-container"
 import { FreeAgentRow } from "./free-agent-row"
 
 type Props = {
-	freeAgents: PlayerAvailabilitySummary[]
+	freeAgents: FreeAgentListing[]
 	captainTeamId: string | null
 }
 

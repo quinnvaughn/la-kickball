@@ -1,8 +1,24 @@
 import { initTRPC, TRPCError } from "@trpc/server"
 import superjson from "superjson"
+import { z } from "zod"
 import type { Context } from "./context"
 
-const t = initTRPC.context<Context>().create({ transformer: superjson })
+const t = initTRPC.context<Context>().create({
+	transformer: superjson,
+	// Failed .input() validation throws with message set to the raw
+	// ZodError, which stringifies to a JSON dump of every issue — fine for
+	// logs, not something to show a user. Surface just the first issue's
+	// message instead.
+	errorFormatter({ shape, error }) {
+		if (error.cause instanceof z.ZodError) {
+			return {
+				...shape,
+				message: error.cause.issues[0]?.message ?? "Invalid input.",
+			}
+		}
+		return shape
+	},
+})
 
 export const router = t.router
 export const publicProcedure = t.procedure

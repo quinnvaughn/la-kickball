@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm"
 import {
 	pgTable,
+	text,
 	timestamp,
 	unique,
 	uniqueIndex,
@@ -44,6 +45,9 @@ export const freeAgentInvites = pgTable(
 		availabilityId: uuid("availability_id")
 			.notNull()
 			.references(() => freeAgentAvailability.id, { onDelete: "cascade" }),
+		// Optional note from the captain, shown to the free agent alongside
+		// the invite.
+		message: text("message"),
 		createdAt: timestamp("created_at").notNull().defaultNow(),
 		// null = pending, waiting on the free agent.
 		// set = the free agent accepted; this is an offer, not a membership

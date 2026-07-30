@@ -2,8 +2,10 @@ import { TRPCError } from "@trpc/server"
 import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm"
 import z from "zod"
 import { db } from "../db"
+import { isUniqueConstraintError } from "../db/errors"
 import {
 	freeAgentAvailability,
+	freeAgentInvites,
 	gameLogs,
 	games,
 	mvpAwards,
@@ -31,10 +33,11 @@ import {
 	type CareerStatsRow,
 	type CareerTotals,
 	computeCareerStats,
+	type FreeAgentListing,
 	type PlayerAvailabilitySummary,
 	WEEK_MVP_STAT_CATEGORIES,
 } from "../domain/stats"
-import { publicProcedure, router } from "../trpc"
+import { protectedProcedure, publicProcedure, router } from "../trpc"
 
 // Same shape as leagues.ts's careerTotalsForLeague, but scoped to a
 // specific set of players (career-wide, across every league/season
@@ -336,14 +339,105 @@ async function weeksWithGamesForSeason(
 	}))
 }
 
-async function weeklySubUserIdsForWeek(weekId: string): Promise<string[]> {
-	const rows = await db
-		.select({ userId: freeAgentAvailability.userId })
+async function weeklySubAvailabilityForWeek(
+	weekId: string,
+): Promise<{ userId: string; availabilityId: string }[]> {
+	return db
+		.select({
+			userId: freeAgentAvailability.userId,
+			availabilityId: freeAgentAvailability.id,
+		})
 		.from(freeAgentAvailability)
 		.where(eq(freeAgentAvailability.weekId, weekId))
 		.orderBy(freeAgentAvailability.createdAt)
+}
 
-	return rows.map((row) => row.userId)
+// The earliest availability row per user within the season — the same
+// "first signed up" row freeAgentUserIdsForSeason orders by. A free-agent
+// (season-long) invite isn't tied to any one week the way a weekly-sub
+// invite is, so it attaches to this row instead.
+async function firstAvailabilityIdsForUsers(
+	userIds: string[],
+	seasonId: string,
+): Promise<Map<string, string>> {
+	if (userIds.length === 0) return new Map()
+
+	const rows = await db
+		.select({
+			userId: freeAgentAvailability.userId,
+			availabilityId: freeAgentAvailability.id,
+			createdAt: freeAgentAvailability.createdAt,
+		})
+		.from(freeAgentAvailability)
+		.innerJoin(weeks, eq(freeAgentAvailability.weekId, weeks.id))
+		.where(
+			and(
+				inArray(freeAgentAvailability.userId, userIds),
+				eq(weeks.seasonId, seasonId),
+			),
+		)
+
+	const firstByUser = new Map<
+		string,
+		{ availabilityId: string; createdAt: Date }
+	>()
+	for (const row of rows) {
+		const existing = firstByUser.get(row.userId)
+		if (!existing || row.createdAt < existing.createdAt) {
+			firstByUser.set(row.userId, {
+				availabilityId: row.availabilityId,
+				createdAt: row.createdAt,
+			})
+		}
+	}
+
+	return new Map(
+		[...firstByUser].map(([userId, row]) => [userId, row.availabilityId]),
+	)
+}
+
+// Which of the given availability rows a team has already sent an invite
+// for — drives the "already invited" state on free-agent/weekly-sub cards.
+async function invitedAvailabilityIdsForTeam(
+	teamId: string,
+	availabilityIds: string[],
+): Promise<Set<string>> {
+	if (availabilityIds.length === 0) return new Set()
+
+	const rows = await db
+		.select({ availabilityId: freeAgentInvites.availabilityId })
+		.from(freeAgentInvites)
+		.where(
+			and(
+				eq(freeAgentInvites.teamId, teamId),
+				inArray(freeAgentInvites.availabilityId, availabilityIds),
+			),
+		)
+
+	return new Set(rows.map((row) => row.availabilityId))
+}
+
+// Attaches each player's availability row and this team's invite state to
+// their summary. Players are dropped (not just left incomplete) if no
+// availability row is found for them, which shouldn't happen since the ids
+// passed in are always sourced from the same availability table.
+function toFreeAgentListings(
+	players: PlayerAvailabilitySummary[],
+	availabilityIdsByUser: Map<string, string>,
+	invitedAvailabilityIds: Set<string>,
+): FreeAgentListing[] {
+	return players.flatMap((player) => {
+		const availabilityId = availabilityIdsByUser.get(player.userId)
+		if (!availabilityId) return []
+
+		return [
+			{
+				...player,
+				availabilityId,
+				invited: invitedAvailabilityIds.has(availabilityId),
+			},
+		]
+	})
 }
 
 export const seasonsRouter = router({
@@ -393,14 +487,28 @@ export const seasonsRouter = router({
 				weeksWithGamesForSeason(season.id),
 			])
 
-			const weeklySubUserIds = currentWeek
-				? await weeklySubUserIdsForWeek(currentWeek.id)
+			const weeklySubAvailability = currentWeek
+				? await weeklySubAvailabilityForWeek(currentWeek.id)
 				: []
+			const weeklySubUserIds = weeklySubAvailability.map((row) => row.userId)
 
-			const [freeAgents, weeklySubs] = await Promise.all([
-				playerAvailabilitySummariesForUsers(freeAgentUserIds),
-				playerAvailabilitySummariesForUsers(weeklySubUserIds),
-			])
+			const [freeAgents, weeklySubs, freeAgentAvailabilityIds] =
+				await Promise.all([
+					playerAvailabilitySummariesForUsers(freeAgentUserIds),
+					playerAvailabilitySummariesForUsers(weeklySubUserIds),
+					firstAvailabilityIdsForUsers(freeAgentUserIds, season.id),
+				])
+
+			const weeklySubAvailabilityIds = new Map(
+				weeklySubAvailability.map((row) => [row.userId, row.availabilityId]),
+			)
+
+			const invitedAvailabilityIds = myCaptainTeamId
+				? await invitedAvailabilityIdsForTeam(myCaptainTeamId, [
+						...freeAgentAvailabilityIds.values(),
+						...weeklySubAvailabilityIds.values(),
+					])
+				: new Set<string>()
 
 			const standings = computeStandings(
 				season.teams.map((team) => ({ teamId: team.id, teamName: team.name })),
@@ -419,13 +527,73 @@ export const seasonsRouter = router({
 				league,
 				isRegistered,
 				myCaptainTeamId,
-				freeAgents,
+				freeAgents: toFreeAgentListings(
+					freeAgents,
+					freeAgentAvailabilityIds,
+					invitedAvailabilityIds,
+				),
 				weeklySubs: {
 					week: currentWeek,
-					players: weeklySubs,
+					players: toFreeAgentListings(
+						weeklySubs,
+						weeklySubAvailabilityIds,
+						invitedAvailabilityIds,
+					),
 				},
 				standings,
 				schedule: buildSchedule(scheduleWeeks),
+			}
+		}),
+
+	sendFreeAgentInvite: protectedProcedure
+		.input(
+			z.object({
+				teamId: z.string(),
+				availabilityId: z.string(),
+				message: z.string().max(500).optional(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			const team = await db.query.teams.findFirst({
+				where: { id: { eq: input.teamId } },
+			})
+
+			if (!team) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Team not found" })
+			}
+
+			const captainTeamId = await getCaptainTeamIdForUser(
+				ctx.user.id,
+				team.seasonId,
+			)
+
+			if (captainTeamId !== input.teamId) {
+				throw new TRPCError({
+					code: "FORBIDDEN",
+					message: "Only this team's captain can send invites.",
+				})
+			}
+
+			try {
+				const [invite] = await db
+					.insert(freeAgentInvites)
+					.values({
+						teamId: input.teamId,
+						availabilityId: input.availabilityId,
+						message: input.message,
+					})
+					.returning()
+
+				return invite
+			} catch (error) {
+				if (isUniqueConstraintError(error)) {
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: "You've already invited this player.",
+					})
+				}
+
+				throw error
 			}
 		}),
 })

@@ -234,6 +234,18 @@ export function buildTopStats(
 		}))
 }
 
+// A free-agent/weekly-sub card's player summary plus what's needed to
+// send (or track) an invite for them. availabilityId is the
+// freeAgentAvailability row this listing represents — that's what a
+// freeAgentInvites row attaches to, not a raw userId. invited is only
+// computed relative to the viewer's own captained team (there's no
+// other team whose invites the viewer could see), so it's always false
+// for a non-captain viewer.
+export interface FreeAgentListing extends PlayerAvailabilitySummary {
+	availabilityId: string
+	invited: boolean
+}
+
 // Surfaces just the single standout stat, for the free-agent/weekly-sub
 // cards — see buildTopStats for the ranking logic itself.
 export function buildPlayerAvailabilitySummary(

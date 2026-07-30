@@ -1,0 +1,1 @@
+ALTER TABLE "free_agent_invites" ADD COLUMN "message" text;
