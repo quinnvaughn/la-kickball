@@ -8,6 +8,7 @@ import { FreeAgentsTab } from "#/components/seasons/free-agents-tab"
 import { RegisterTab } from "#/components/seasons/register-tab"
 import { RegistrationPricing } from "#/components/seasons/registration-pricing"
 import { ScheduleTab } from "#/components/seasons/schedule-tab"
+import { SeasonStatsTab } from "#/components/seasons/season-stats-tab"
 import { StandingsTab } from "#/components/seasons/standings-tab"
 import {
 	formatDayOfTheWeek,
@@ -165,6 +166,13 @@ function RouteComponent() {
 							seasonId={season.id}
 							captainTeamId={season.myCaptainTeamId}
 							weeklySubs={season.weeklySubs}
+						/>
+					))
+					.with("stats", () => (
+						<SeasonStatsTab
+							leaders={season.seasonLeaders}
+							league={league}
+							season={seasonSlug}
 						/>
 					))
 					.otherwise(() => null)}

@@ -29,13 +29,18 @@ import {
 import { formatSeasonName } from "../domain/seasons"
 import { computeStandings } from "../domain/standings"
 import {
+	buildCareerLeaders,
 	buildPlayerAvailabilitySummary,
 	buildTopStats,
+	CAREER_STAT_FIELD_KEYS,
 	type CareerStatsRow,
 	type CareerTotals,
 	computeCareerStats,
 	type FreeAgentListing,
 	type PlayerAvailabilitySummary,
+	paginateCareerStats,
+	sortCareerStats,
+	toCareerStatsPlayer,
 	WEEK_MVP_STAT_CATEGORIES,
 	type WeeklySubs,
 } from "../domain/stats"
@@ -75,6 +80,39 @@ async function careerTotalsForUsers(userIds: string[]) {
 		.innerJoin(seasons, eq(weeks.seasonId, seasons.id))
 		.innerJoin(users, eq(gameLogs.userId, users.id))
 		.where(inArray(gameLogs.userId, userIds))
+		.groupBy(gameLogs.userId, users.firstName, users.lastName)
+}
+
+// Same shape as leagues.ts's careerTotalsForLeague, but scoped to a single
+// season instead of every season in a league — drives the season-leaders
+// cards and the season's full stats table.
+async function seasonTotalsForSeason(seasonId: string) {
+	return db
+		.select({
+			userId: gameLogs.userId,
+			firstName: users.firstName,
+			lastName: users.lastName,
+			seasons: sql<number>`count(distinct ${seasons.id})`.mapWith(Number),
+			games: sql<number>`count(distinct ${gameLogs.id})`.mapWith(Number),
+			atBats: sql<number>`sum(${gameLogs.atBats})`.mapWith(Number),
+			runs: sql<number>`sum(${gameLogs.runs})`.mapWith(Number),
+			rki: sql<number>`sum(${gameLogs.rki})`.mapWith(Number),
+			singles: sql<number>`sum(${gameLogs.singles})`.mapWith(Number),
+			doubles: sql<number>`sum(${gameLogs.doubles})`.mapWith(Number),
+			triples: sql<number>`sum(${gameLogs.triples})`.mapWith(Number),
+			homers: sql<number>`sum(${gameLogs.homers})`.mapWith(Number),
+			walks: sql<number>`sum(${gameLogs.walks})`.mapWith(Number),
+			sacs: sql<number>`sum(${gameLogs.sacs})`.mapWith(Number),
+			extraBasesTaken: sql<number>`sum(${gameLogs.extraBasesTaken})`.mapWith(
+				Number,
+			),
+		})
+		.from(gameLogs)
+		.innerJoin(games, eq(gameLogs.gameId, games.id))
+		.innerJoin(weeks, eq(games.weekId, weeks.id))
+		.innerJoin(seasons, eq(weeks.seasonId, seasons.id))
+		.innerJoin(users, eq(gameLogs.userId, users.id))
+		.where(eq(seasons.id, seasonId))
 		.groupBy(gameLogs.userId, users.firstName, users.lastName)
 }
 
@@ -259,7 +297,10 @@ async function mvpsForWeeks(
 		)
 		.innerJoin(
 			teams,
-			and(eq(teams.id, teamMemberships.teamId), eq(teams.seasonId, weeks.seasonId)),
+			and(
+				eq(teams.id, teamMemberships.teamId),
+				eq(teams.seasonId, weeks.seasonId),
+			),
 		)
 		.innerJoin(games, eq(games.weekId, mvpAwards.weekId))
 		.innerJoin(
@@ -502,6 +543,7 @@ export const seasonsRouter = router({
 				currentWeek,
 				completedGames,
 				scheduleWeeks,
+				seasonTotals,
 			] = await Promise.all([
 				ctx.user
 					? isUserRegisteredForSeason(ctx.user.id, season.id)
@@ -513,6 +555,7 @@ export const seasonsRouter = router({
 				currentWeekForSeason(season.id),
 				completedRegularSeasonGamesForSeason(season.id),
 				weeksWithGamesForSeason(season.id),
+				seasonTotalsForSeason(season.id),
 			])
 
 			const weeklySubAvailability = currentWeek
@@ -581,6 +624,57 @@ export const seasonsRouter = router({
 				} satisfies WeeklySubs,
 				standings,
 				schedule: buildSchedule(scheduleWeeks),
+				seasonLeaders: buildCareerLeaders(seasonTotals.map(computeCareerStats)),
+			}
+		}),
+
+	stats: publicProcedure
+		.input(
+			z.object({
+				leagueSlug: z.string(),
+				seasonSlug: z.string(),
+				sortBy: z.enum(CAREER_STAT_FIELD_KEYS).default("atBats"),
+				sortDir: z.enum(["asc", "desc"]).default("desc"),
+				page: z.number().int().min(1).default(1),
+				pageSize: z.number().int().min(1).max(100).default(25),
+			}),
+		)
+		.query(async ({ input }) => {
+			const league = await db.query.leagues.findFirst({
+				where: { slug: { eq: input.leagueSlug } },
+			})
+
+			if (!league) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "League not found" })
+			}
+
+			const season = await db.query.seasons.findFirst({
+				where: {
+					leagueId: { eq: league.id },
+					slug: { eq: input.seasonSlug },
+				},
+			})
+
+			if (!season) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Season not found" })
+			}
+
+			const totals = await seasonTotalsForSeason(season.id)
+			const rows: CareerStatsRow[] = totals.map(computeCareerStats)
+
+			const sorted = sortCareerStats(rows, input.sortBy, input.sortDir)
+			const total = sorted.length
+			const totalPages = Math.max(1, Math.ceil(total / input.pageSize))
+			const page = Math.min(input.page, totalPages)
+
+			return {
+				players: paginateCareerStats(sorted, page, input.pageSize).map(
+					toCareerStatsPlayer,
+				),
+				total,
+				page,
+				pageSize: input.pageSize,
+				totalPages,
 			}
 		}),
 
