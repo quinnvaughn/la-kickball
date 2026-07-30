@@ -1,4 +1,5 @@
 import type { gameRoundEnum } from "../db/schema/games"
+import type { PlayerTopStat } from "./stats"
 
 export type GameRound = (typeof gameRoundEnum.enumValues)[number]
 
@@ -46,11 +47,31 @@ export interface ScheduleGame {
 	inning: number | null
 }
 
+// The UI shows every winner as a plain "MVP" card regardless of division —
+// the guy/girl/mvp category distinction is still stored in mvp_awards (see
+// db/schema/mvp-awards.ts) but isn't surfaced here. atBats/hits drive the
+// "4-5" line; topStats mirrors the free-agent/weekly-sub cards (see
+// domain/stats.ts PlayerTopStat), just more than one and excluding hits
+// (already covered by the "4-5" line) — whichever counting stats this
+// player racked up highest that week, not a fixed runs/rki pair. Both are
+// empty/zero only if they somehow have an MVP award but no game log for
+// that week's games.
+export interface WeekMvp {
+	userId: string
+	firstName: string
+	lastName: string
+	teamName: string
+	atBats: number
+	hits: number
+	topStats: PlayerTopStat[]
+}
+
 export interface ScheduleWeek {
 	id: string
 	weekNumber: number
 	date: string | null
 	games: ScheduleGame[]
+	mvps: WeekMvp[]
 }
 
 export interface Schedule {

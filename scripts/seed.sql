@@ -105,6 +105,10 @@ DECLARE
 	team_id uuid;
 	shuffled_players uuid[];
 	week_id uuid;
+	-- Separate from week_id: a bare "week_id" inside the MVP loop's SQL
+	-- below is ambiguous against the games.week_id column and errors, so
+	-- that query needs its own, differently-named variable to bind against.
+	mvp_week_id uuid;
 	week_date date;
 	t int;
 	w int;
@@ -365,17 +369,38 @@ BEGIN
 	END LOOP;
 
 	-- Weekly MVPs for every regular-season week that's actually happened,
-	-- independent of whether the season has playoffs yet.
+	-- independent of whether the season has playoffs yet. Coed weeks get
+	-- two winners (guy/girl); mens weeks get a single winner, since that
+	-- division has no gender split to make and doesn't track defense.
+	-- Candidates are drawn straight from that week's game_logs rather than
+	-- shuffled_players — shuffled_players is the whole shared player pool
+	-- (only a prefix of it lands on a roster this season) and, separately,
+	-- a suspended game (see p_suspend_first_game) never gets game_logs
+	-- seeded at all. Querying game_logs directly guarantees every MVP
+	-- actually has a stat line to show for that week, in one fix.
 	FOR w IN 1..p_completed_weeks LOOP
 		SELECT id INTO week_id FROM weeks WHERE season_id = p_season_id AND week_number = w;
+		mvp_week_id := week_id;
 
-		mvp_candidate := shuffled_players[1 + floor(random() * array_length(shuffled_players, 1))::int];
-		INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
-		VALUES (gen_random_uuid(), week_id, NULL, 'guy', mvp_candidate);
+		IF v_season.division = 'coed' THEN
+			SELECT gl.user_id INTO mvp_candidate
+			FROM game_logs gl JOIN games g ON g.id = gl.game_id
+			WHERE g.week_id = mvp_week_id ORDER BY random() LIMIT 1;
+			INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
+			VALUES (gen_random_uuid(), week_id, NULL, 'guy', mvp_candidate);
 
-		mvp_candidate := shuffled_players[1 + floor(random() * array_length(shuffled_players, 1))::int];
-		INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
-		VALUES (gen_random_uuid(), week_id, NULL, 'girl', mvp_candidate);
+			SELECT gl.user_id INTO mvp_candidate
+			FROM game_logs gl JOIN games g ON g.id = gl.game_id
+			WHERE g.week_id = mvp_week_id ORDER BY random() LIMIT 1;
+			INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
+			VALUES (gen_random_uuid(), week_id, NULL, 'girl', mvp_candidate);
+		ELSE
+			SELECT gl.user_id INTO mvp_candidate
+			FROM game_logs gl JOIN games g ON g.id = gl.game_id
+			WHERE g.week_id = mvp_week_id ORDER BY random() LIMIT 1;
+			INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
+			VALUES (gen_random_uuid(), week_id, NULL, 'mvp', mvp_candidate);
+		END IF;
 	END LOOP;
 
 	IF p_add_playoffs THEN

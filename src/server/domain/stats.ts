@@ -210,42 +210,53 @@ export interface PlayerAvailabilitySummary {
 	topStat: PlayerTopStat | null
 }
 
-// Surfaces whichever counting stat a player racks up fastest per game they
-// play (highest per-game rate wins, ties keep whichever category was
-// checked first) — someone who averages 2.1 RKI/game reads as an RKI guy,
-// someone who mostly walks reads as a walks guy. This is a judgment call
-// (favoring the player's own standout number over, say, how they compare
-// to the rest of the league), not a derived "correct" answer.
+// Ranks a player's counting stats by per-game rate, highest first (ties
+// keep whichever category comes first in `categories`) — someone who
+// averages 2.1 RKI/game reads as an RKI guy, someone who mostly walks
+// reads as a walks guy. This is a judgment call (favoring a player's own
+// standout numbers over, say, how they compare to the rest of the
+// league), not a derived "correct" answer. Empty for a player with no
+// games played — nothing to rank yet.
+export function buildTopStats(
+	row: Pick<CareerStatsRow, PerGameStatCategory | "games">,
+	count: number,
+	categories: readonly PerGameStatCategory[] = PER_GAME_STAT_CATEGORIES,
+): PlayerTopStat[] {
+	if (row.games === 0) return []
+
+	return [...categories]
+		.sort((a, b) => row[b] - row[a])
+		.slice(0, count)
+		.map((key) => ({
+			key,
+			label: STAT_LABELS.get(key) ?? key,
+			perGame: row[key] / row.games,
+		}))
+}
+
+// Surfaces just the single standout stat, for the free-agent/weekly-sub
+// cards — see buildTopStats for the ranking logic itself.
 export function buildPlayerAvailabilitySummary(
 	row: CareerStatsRow,
 ): PlayerAvailabilitySummary {
 	const { userId, firstName, lastName, games } = row
-
-	if (games === 0) {
-		return { userId, firstName, lastName, gamesPlayed: 0, topStat: null }
-	}
-
-	const best = PER_GAME_STAT_CATEGORIES.reduce<{
-		key: PerGameStatCategory
-		value: number
-	} | null>(
-		(best, key) =>
-			!best || row[key] > best.value ? { key, value: row[key] } : best,
-		null,
-	)
+	const [topStat] = buildTopStats(row, 1)
 
 	return {
 		userId,
 		firstName,
 		lastName,
 		gamesPlayed: games,
-		topStat: best && {
-			key: best.key,
-			label: STAT_LABELS.get(best.key) ?? best.key,
-			perGame: best.value / games,
-		},
+		topStat: topStat ?? null,
 	}
 }
+
+// hits is left out here — a week-MVP card already shows the hits/at-bats
+// line (e.g. "4-5") directly, so surfacing "4 H" again as a top stat would
+// just repeat it.
+export const WEEK_MVP_STAT_CATEGORIES = PER_GAME_STAT_CATEGORIES.filter(
+	(category) => category !== "hits",
+)
 
 export function sortCareerStats(
 	rows: CareerStatsRow[],

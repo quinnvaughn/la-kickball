@@ -3,6 +3,7 @@ import { css } from "styled-system/css"
 import { Grid } from "styled-system/jsx"
 import type { ScheduleWeek } from "#/server/domain/schedule"
 import { Badge } from "../ui/badge"
+import { WeekMVP } from "../week/week-mvp"
 import { WeekGameCard } from "./week-game-card"
 
 type Props = {
@@ -54,6 +55,13 @@ export function WeekGroup({ league, season, week, currentWeekId }: Props) {
 				</span>
 			</summary>
 			<Grid gap="3" className={css({ marginTop: "4" })}>
+				{week.mvps.length > 0 && (
+					<Grid gap="3" gridTemplateColumns={"repeat(2, 1fr)"}>
+						{week.mvps.map((mvp) => (
+							<WeekMVP key={mvp.userId} mvp={mvp} />
+						))}
+					</Grid>
+				)}
 				{week.games.map((g) => (
 					<WeekGameCard game={g} key={g.id} league={league} season={season} />
 				))}

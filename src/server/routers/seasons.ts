@@ -6,7 +6,10 @@ import {
 	freeAgentAvailability,
 	gameLogs,
 	games,
+	mvpAwards,
 	seasons,
+	teamMemberships,
+	teams,
 	users,
 	weeks,
 } from "../db/schema"
@@ -18,15 +21,18 @@ import {
 	buildSchedule,
 	getGameStatus,
 	type ScheduleWeek,
+	type WeekMvp,
 } from "../domain/schedule"
 import { formatSeasonName } from "../domain/seasons"
 import { computeStandings } from "../domain/standings"
 import {
 	buildPlayerAvailabilitySummary,
+	buildTopStats,
 	type CareerStatsRow,
 	type CareerTotals,
 	computeCareerStats,
 	type PlayerAvailabilitySummary,
+	WEEK_MVP_STAT_CATEGORIES,
 } from "../domain/stats"
 import { publicProcedure, router } from "../trpc"
 
@@ -181,6 +187,89 @@ async function completedRegularSeasonGamesForSeason(seasonId: string) {
 		)
 }
 
+// Each week-MVP's team plus their batting line for that week's games,
+// summed in the rare case a week holds more than one game for them (e.g.
+// semifinals). Team comes from the player's season-long roster spot
+// (team_memberships with weekId null), scoped to the same season as the
+// award's week — team_memberships is keyed on (teamId, userId, weekId),
+// not (userId, weekId) alone, so without that season scope a player who's
+// rostered across multiple seasons resolves to every team they've ever
+// played on, not just this one. lineup_entries looked like the more
+// obviously "correct" join (it's literally who played in that game) but
+// it's only populated for two special-cased seed games, not regular
+// completed ones, so it silently drops nearly every MVP. Scoped to a
+// caller-supplied set of week ids rather than a season id so it can share
+// a single query across every week already fetched by
+// weeksWithGamesForSeason.
+async function mvpsForWeeks(
+	weekIds: string[],
+): Promise<(WeekMvp & { weekId: string })[]> {
+	if (weekIds.length === 0) return []
+
+	const rows = await db
+		.select({
+			weekId: mvpAwards.weekId,
+			userId: mvpAwards.userId,
+			firstName: users.firstName,
+			lastName: users.lastName,
+			teamName: teams.name,
+			games: sql<number>`count(distinct ${gameLogs.id})`.mapWith(Number),
+			atBats: sql<number>`sum(${gameLogs.atBats})`.mapWith(Number),
+			runs: sql<number>`sum(${gameLogs.runs})`.mapWith(Number),
+			rki: sql<number>`sum(${gameLogs.rki})`.mapWith(Number),
+			singles: sql<number>`sum(${gameLogs.singles})`.mapWith(Number),
+			doubles: sql<number>`sum(${gameLogs.doubles})`.mapWith(Number),
+			triples: sql<number>`sum(${gameLogs.triples})`.mapWith(Number),
+			homers: sql<number>`sum(${gameLogs.homers})`.mapWith(Number),
+			walks: sql<number>`sum(${gameLogs.walks})`.mapWith(Number),
+			sacs: sql<number>`sum(${gameLogs.sacs})`.mapWith(Number),
+			extraBasesTaken: sql<number>`sum(${gameLogs.extraBasesTaken})`.mapWith(
+				Number,
+			),
+		})
+		.from(mvpAwards)
+		.innerJoin(users, eq(users.id, mvpAwards.userId))
+		.innerJoin(weeks, eq(weeks.id, mvpAwards.weekId))
+		.innerJoin(
+			teamMemberships,
+			and(
+				eq(teamMemberships.userId, mvpAwards.userId),
+				isNull(teamMemberships.weekId),
+			),
+		)
+		.innerJoin(
+			teams,
+			and(eq(teams.id, teamMemberships.teamId), eq(teams.seasonId, weeks.seasonId)),
+		)
+		.innerJoin(games, eq(games.weekId, mvpAwards.weekId))
+		.innerJoin(
+			gameLogs,
+			and(eq(gameLogs.gameId, games.id), eq(gameLogs.userId, mvpAwards.userId)),
+		)
+		.where(and(inArray(mvpAwards.weekId, weekIds), isNotNull(mvpAwards.weekId)))
+		.groupBy(
+			mvpAwards.weekId,
+			mvpAwards.userId,
+			users.firstName,
+			users.lastName,
+			teams.name,
+		)
+
+	return rows.map((row) => {
+		const stats = computeCareerStats(row)
+		return {
+			weekId: row.weekId as string,
+			userId: row.userId,
+			firstName: row.firstName,
+			lastName: row.lastName,
+			teamName: row.teamName,
+			atBats: stats.atBats,
+			hits: stats.hits,
+			topStats: buildTopStats(stats, 2, WEEK_MVP_STAT_CATEGORIES),
+		}
+	})
+}
+
 // Every week in the season with its games (and each game's team names)
 // attached, ordered by week number — the raw material for the schedule
 // tab. Playoff weeks are included same as regular ones; round-specific
@@ -209,10 +298,19 @@ async function weeksWithGamesForSeason(
 		},
 	})
 
+	const mvpRows = await mvpsForWeeks(rows.map((week) => week.id))
+	const mvpsByWeek = new Map<string, WeekMvp[]>()
+	for (const { weekId, ...mvp } of mvpRows) {
+		const list = mvpsByWeek.get(weekId) ?? []
+		list.push(mvp)
+		mvpsByWeek.set(weekId, list)
+	}
+
 	return rows.map((week) => ({
 		id: week.id,
 		weekNumber: week.weekNumber,
 		date: week.date,
+		mvps: mvpsByWeek.get(week.id) ?? [],
 		games: week.games.map((game) => ({
 			id: game.id,
 			round: game.round,

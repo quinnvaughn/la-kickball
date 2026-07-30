@@ -25,9 +25,11 @@ export const mvpAwards = pgTable(
 			onDelete: "cascade",
 		}),
 
-		// Required for week awards ("guy" / "girl"), null for season
-		// awards — a season only ever has one overall MVP, coed or not,
-		// there's no category split at that scope.
+		// Required for week awards — "guy" / "girl" for a coed week's two
+		// winners, "mvp" for a mens week's single winner (no gender split
+		// there). Null for season awards — a season only ever has one
+		// overall MVP, coed or not, there's no category split at that
+		// scope.
 		category: text("category"),
 
 		userId: uuid("user_id")
