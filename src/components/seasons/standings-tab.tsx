@@ -12,6 +12,7 @@ type Props = {
 	standings: TeamStanding[]
 	league: string
 	season: string
+	isRegistered: boolean
 }
 
 type SortKey =
@@ -39,7 +40,12 @@ const columns: {
 	{ key: "runDiff", label: "+/-", numeric: true },
 ]
 
-export function StandingsTab({ standings, league, season }: Props) {
+export function StandingsTab({
+	standings,
+	league,
+	season,
+	isRegistered,
+}: Props) {
 	// Points is what standings actually rank on (3/1/0 for win/tie/loss),
 	// with run differential as the tiebreak — same order computeStandings
 	// returns them in, so this is just the default sort, not a different one.
@@ -67,25 +73,32 @@ export function StandingsTab({ standings, league, season }: Props) {
 								<p className={css({ color: "subtitle" })}>
 									No teams registered yet.
 								</p>
-								<Link
-									to="/leagues/$league/$season/create-team"
-									params={{ league, season }}
-									className={css({
-										background: "transparent",
-										color: "purple.dark",
-										borderColor: "purple",
-										borderWidth: "2px",
-										borderStyle: "solid",
-										borderRadius: "full",
-										fontFamily: "heading",
-										fontWeight: "700",
-										py: "3",
-										px: "6",
-										cursor: "pointer",
-									})}
-								>
-									Register the first team
-								</Link>
+								{!isRegistered && (
+									<Link
+										to="/leagues/$league/$season/create-team"
+										params={{ league, season }}
+										className={css({
+											background: "transparent",
+											color: "purple.dark",
+											borderColor: "purple",
+											borderWidth: "2px",
+											borderStyle: "solid",
+											borderRadius: "full",
+											fontFamily: "heading",
+											fontWeight: "700",
+											py: "3",
+											px: "6",
+											cursor: "pointer",
+										})}
+									>
+										Register the first team
+									</Link>
+								)}
+								{isRegistered && (
+									<p className={css({ color: "subtitle" })}>
+										Check back once teams start registering.
+									</p>
+								)}
 							</VStack>
 						</EmptyTabContainer>
 					),

@@ -147,6 +147,7 @@ function RouteComponent() {
 							standings={season.standings}
 							league={league}
 							season={seasonSlug}
+							isRegistered={season.isRegistered}
 						/>
 					))
 					.with("schedule", () => (
