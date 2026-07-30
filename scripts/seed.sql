@@ -423,6 +423,23 @@ BEGIN
 		END IF;
 	END LOOP;
 
+	-- The season's overall regular-season MVP, awarded once the whole
+	-- regular season (not just some prefix of it) has been played — a
+	-- season still mid-way through shouldn't have "the" regular-season
+	-- winner decided yet. Drawn from regular-round game_logs across the
+	-- whole season, same reasoning as the weekly-MVP candidate query above.
+	IF p_completed_weeks >= p_total_weeks THEN
+		SELECT gl.user_id INTO mvp_candidate
+		FROM game_logs gl
+		JOIN games g ON g.id = gl.game_id
+		JOIN weeks wk ON wk.id = g.week_id
+		WHERE wk.season_id = p_season_id AND g.round = 'regular'
+		ORDER BY random() LIMIT 1;
+
+		INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
+		VALUES (gen_random_uuid(), NULL, p_season_id, 'regular', mvp_candidate);
+	END IF;
+
 	IF p_add_playoffs THEN
 		-- Semifinals: teams[1] v teams[2], teams[3] v teams[4] — already played.
 		week_id := gen_random_uuid();
@@ -490,6 +507,20 @@ BEGIN
 			);
 
 			UPDATE seasons SET winner_id = final_winner WHERE id = p_season_id;
+
+			-- The season's playoff MVP — only decided once the final's
+			-- actually been played (that's what "playoff run is over"
+			-- means here), drawn from every quarterfinal/semifinal/final
+			-- game_logs row logged this season.
+			SELECT gl.user_id INTO mvp_candidate
+			FROM game_logs gl
+			JOIN games g ON g.id = gl.game_id
+			JOIN weeks wk ON wk.id = g.week_id
+			WHERE wk.season_id = p_season_id AND g.round IN ('quarterfinal', 'semifinal', 'final')
+			ORDER BY random() LIMIT 1;
+
+			INSERT INTO mvp_awards (id, week_id, season_id, category, user_id)
+			VALUES (gen_random_uuid(), NULL, p_season_id, 'playoff', mvp_candidate);
 		ELSE
 			INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id)
 			VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, ref_id);

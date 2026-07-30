@@ -24,6 +24,7 @@ import {
 	buildSchedule,
 	getGameStatus,
 	type ScheduleWeek,
+	type SeasonMvp,
 	type WeekMvp,
 } from "../domain/schedule"
 import { formatSeasonName } from "../domain/seasons"
@@ -331,6 +332,87 @@ async function mvpsForWeeks(
 	})
 }
 
+// Every round that counts as "playoff" rather than regular-season — used
+// to scope a playoff MVP's batting line to just those games.
+const PLAYOFF_ROUNDS = ["quarterfinal", "semifinal", "final"] as const
+
+// The season's regular-season or playoff MVP (mvp_awards row with
+// seasonId set, category "regular" or "playoff" — see
+// db/schema/mvp-awards.ts) plus their batting line summed across every
+// game they logged in that scope, not just one week's. games is included
+// since a playoff run isn't a fixed length (2 games with a bye, 3
+// otherwise). The unique(seasonId, category) constraint guarantees at
+// most one row per category, so null just means the league hasn't named
+// that one yet. Team join follows the same season-scoped
+// team_memberships convention as mvpsForWeeks.
+async function seasonMvpForSeason(
+	seasonId: string,
+	category: "regular" | "playoff",
+): Promise<SeasonMvp | null> {
+	const roundFilter =
+		category === "regular"
+			? eq(games.round, "regular")
+			: inArray(games.round, PLAYOFF_ROUNDS)
+
+	const [row] = await db
+		.select({
+			userId: mvpAwards.userId,
+			firstName: users.firstName,
+			lastName: users.lastName,
+			teamName: teams.name,
+			games: sql<number>`count(distinct ${gameLogs.id})`.mapWith(Number),
+			atBats: sql<number>`sum(${gameLogs.atBats})`.mapWith(Number),
+			runs: sql<number>`sum(${gameLogs.runs})`.mapWith(Number),
+			rki: sql<number>`sum(${gameLogs.rki})`.mapWith(Number),
+			singles: sql<number>`sum(${gameLogs.singles})`.mapWith(Number),
+			doubles: sql<number>`sum(${gameLogs.doubles})`.mapWith(Number),
+			triples: sql<number>`sum(${gameLogs.triples})`.mapWith(Number),
+			homers: sql<number>`sum(${gameLogs.homers})`.mapWith(Number),
+			walks: sql<number>`sum(${gameLogs.walks})`.mapWith(Number),
+			sacs: sql<number>`sum(${gameLogs.sacs})`.mapWith(Number),
+			extraBasesTaken: sql<number>`sum(${gameLogs.extraBasesTaken})`.mapWith(
+				Number,
+			),
+		})
+		.from(mvpAwards)
+		.innerJoin(users, eq(users.id, mvpAwards.userId))
+		.innerJoin(
+			teamMemberships,
+			and(
+				eq(teamMemberships.userId, mvpAwards.userId),
+				isNull(teamMemberships.weekId),
+			),
+		)
+		.innerJoin(
+			teams,
+			and(eq(teams.id, teamMemberships.teamId), eq(teams.seasonId, seasonId)),
+		)
+		.innerJoin(weeks, eq(weeks.seasonId, seasonId))
+		.innerJoin(games, and(eq(games.weekId, weeks.id), roundFilter))
+		.innerJoin(
+			gameLogs,
+			and(eq(gameLogs.gameId, games.id), eq(gameLogs.userId, mvpAwards.userId)),
+		)
+		.where(
+			and(eq(mvpAwards.seasonId, seasonId), eq(mvpAwards.category, category)),
+		)
+		.groupBy(mvpAwards.userId, users.firstName, users.lastName, teams.name)
+
+	if (!row) return null
+
+	const stats = computeCareerStats(row)
+	return {
+		userId: row.userId,
+		firstName: row.firstName,
+		lastName: row.lastName,
+		teamName: row.teamName,
+		games: row.games,
+		atBats: stats.atBats,
+		hits: stats.hits,
+		topStats: buildTopStats(stats, 2, WEEK_MVP_STAT_CATEGORIES),
+	}
+}
+
 // Every week in the season with its games (and each game's team names)
 // attached, ordered by week number — the raw material for the schedule
 // tab. Playoff weeks are included same as regular ones; round-specific
@@ -544,6 +626,8 @@ export const seasonsRouter = router({
 				completedGames,
 				scheduleWeeks,
 				seasonTotals,
+				regularSeasonMvp,
+				playoffMvp,
 			] = await Promise.all([
 				ctx.user
 					? isUserRegisteredForSeason(ctx.user.id, season.id)
@@ -556,6 +640,8 @@ export const seasonsRouter = router({
 				completedRegularSeasonGamesForSeason(season.id),
 				weeksWithGamesForSeason(season.id),
 				seasonTotalsForSeason(season.id),
+				seasonMvpForSeason(season.id, "regular"),
+				seasonMvpForSeason(season.id, "playoff"),
 			])
 
 			const weeklySubAvailability = currentWeek
@@ -625,6 +711,8 @@ export const seasonsRouter = router({
 				standings,
 				schedule: buildSchedule(scheduleWeeks),
 				seasonLeaders: buildCareerLeaders(seasonTotals.map(computeCareerStats)),
+				regularSeasonMvp,
+				playoffMvp,
 			}
 		}),
 

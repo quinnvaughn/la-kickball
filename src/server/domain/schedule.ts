@@ -71,6 +71,17 @@ export interface WeekMvp {
 	topStats: PlayerTopStat[]
 }
 
+// A season-scoped MVP (an mvp_awards row with seasonId set — see
+// db/schema/mvp-awards.ts, category "regular" or "playoff") is the same
+// shape as a week MVP, just with its batting line aggregated across every
+// game the player logged in that scope (every regular-season game, or
+// every quarterfinal/semifinal/final) instead of one week's games. games
+// is included on top of WeekMvp since that count isn't fixed the way a
+// week's is — a playoff run is 2 games for a team with a bye, 3 otherwise.
+export interface SeasonMvp extends WeekMvp {
+	games: number
+}
+
 export interface ScheduleWeek {
 	id: string
 	weekNumber: number

@@ -25,12 +25,13 @@ export const mvpAwards = pgTable(
 			onDelete: "cascade",
 		}),
 
-		// Required for week awards — "guy" / "girl" for a coed week's two
-		// winners, "mvp" for a mens week's single winner (no gender split
-		// there). Null for season awards — a season only ever has one
-		// overall MVP, coed or not, there's no category split at that
-		// scope.
-		category: text("category"),
+		// Always required, but what it distinguishes depends on scope: for
+		// a week award, "guy" / "girl" for a coed week's two winners,
+		// "mvp" for a mens week's single winner (no gender split there);
+		// for a season award, "regular" or "playoff" — a season crowns one
+		// MVP for its regular season and, once the final's been played, a
+		// separate one for its playoff run.
+		category: text("category").notNull(),
 
 		userId: uuid("user_id")
 			.notNull()
@@ -39,26 +40,22 @@ export const mvpAwards = pgTable(
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 	},
 	(table) => [
-		// Either a week award (weekId set, category required) or a
-		// season award (seasonId set, category must be null) — never
-		// both, never neither, and never a week award missing its
-		// category or a season award with one it shouldn't have.
+		// Either a week award (weekId set) or a season award (seasonId
+		// set) — never both, never neither. category is required either
+		// way (enforced by the column's NOT NULL above).
 		check(
 			"scope_matches_category",
 			sql`
-				(${table.weekId} IS NOT NULL AND ${table.seasonId} IS NULL AND ${table.category} IS NOT NULL)
+				(${table.weekId} IS NOT NULL AND ${table.seasonId} IS NULL)
 				OR
-				(${table.seasonId} IS NOT NULL AND ${table.weekId} IS NULL AND ${table.category} IS NULL)
+				(${table.seasonId} IS NOT NULL AND ${table.weekId} IS NULL)
 			`,
 		),
 		// One winner per category per week...
 		unique().on(table.weekId, table.category),
-		// ...and exactly one winner per season, full stop. NULLs in a
-		// unique constraint don't collide with each other in Postgres,
-		// so the many week-scoped rows (seasonId always null) don't
-		// conflict with this — only two actual season-scoped rows
-		// sharing the same seasonId would.
-		unique().on(table.seasonId),
+		// ...and one winner per category per season — "regular" and
+		// "playoff" each get their own row, but only one of each.
+		unique().on(table.seasonId, table.category),
 	],
 )
 

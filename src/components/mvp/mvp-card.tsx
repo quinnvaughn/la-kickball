@@ -1,13 +1,22 @@
 import { Link } from "@tanstack/react-router"
 import { css } from "styled-system/css"
-import type { WeekMvp } from "#/server/domain/schedule"
+import type { SeasonMvp, WeekMvp } from "#/server/domain/schedule"
+import { formatStat } from "#/server/domain/stats"
 import { formatUsersName } from "../user/utils"
 
-type Props = {
+type WeekProps = {
 	mvp: WeekMvp
+	category: "week"
 }
 
-export function WeekMVP({ mvp }: Props) {
+type SeasonMVPProps = {
+	mvp: SeasonMvp
+	category: "season"
+}
+
+type Props = WeekProps | SeasonMVPProps
+
+export function MVPCard({ mvp, category = "week" }: Props) {
 	return (
 		<div
 			className={css({
@@ -54,8 +63,9 @@ export function WeekMVP({ mvp }: Props) {
 				{" · "}
 				{mvp.topStats.map(
 					(ts, i) =>
-						`${ts.perGame} ${ts.label}${i < mvp.topStats.length - 1 ? " · " : ""}`,
+						`${formatStat(ts.key, ts.perGame)}${i < mvp.topStats.length - 1 ? " · " : ""}`,
 				)}
+				{category === "season" && " across the regular season"}
 			</div>
 		</div>
 	)

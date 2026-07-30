@@ -73,14 +73,18 @@ export type LeaderCategory = (typeof LEADER_CATEGORIES)[number]
 // call, not a derived value.
 export const MIN_AT_BATS_FOR_RATE_LEADERS = 10
 
-const RATE_CATEGORIES: ReadonlySet<LeaderCategory> = new Set([
+type RateCategory = "avg" | "slg" | "obp" | "ops"
+
+const RATE_CATEGORIES: ReadonlySet<LeaderCategory> = new Set<RateCategory>([
 	"avg",
 	"slg",
 	"obp",
 	"ops",
 ])
 
-export function isRateCategory(category: LeaderCategory): boolean {
+export function isRateCategory(
+	category: LeaderCategory,
+): category is RateCategory {
 	return RATE_CATEGORIES.has(category)
 }
 
@@ -201,6 +205,34 @@ export interface PlayerTopStat {
 	key: PerGameStatCategory
 	label: string
 	perGame: number
+}
+
+// Spelled-out singular/plural names for the stat categories that show up
+// in topStats — the MVP card reads better as "3 Runs" than "3 R", but the
+// career stats table still wants the compact CAREER_STAT_FIELDS
+// abbreviation, so this is a separate map rather than a replacement.
+const STAT_NAMES: Record<PerGameStatCategory, { singular: string; plural: string }> = {
+	hits: { singular: "Hit", plural: "Hits" },
+	singles: { singular: "Single", plural: "Singles" },
+	doubles: { singular: "Double", plural: "Doubles" },
+	triples: { singular: "Triple", plural: "Triples" },
+	homers: { singular: "Home Run", plural: "Home Runs" },
+	runs: { singular: "Run", plural: "Runs" },
+	rki: { singular: "RKI", plural: "RKIs" },
+	walks: { singular: "Walk", plural: "Walks" },
+	sacs: { singular: "Sac", plural: "Sacs" },
+	extraBasesTaken: { singular: "Extra Base Taken", plural: "Extra Bases Taken" },
+}
+
+// Formats a topStat's per-game rate as "<value> <name>" with the value
+// trimmed to a whole number when it lands on one exactly (a season MVP's
+// total is usually a clean multiple of games played) and one decimal
+// otherwise, and the stat name singularized when that displayed value is 1.
+export function formatStat(key: PerGameStatCategory, perGame: number): string {
+	const display = Number.isInteger(perGame) ? perGame.toString() : perGame.toFixed(1)
+	const names = STAT_NAMES[key]
+	const name = Number(display) === 1 ? names.singular : names.plural
+	return `${display} ${name}`
 }
 
 export interface PlayerAvailabilitySummary {

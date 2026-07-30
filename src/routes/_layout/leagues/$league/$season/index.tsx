@@ -7,6 +7,7 @@ import { LeagueLocationLink } from "#/components/leagues/league-location-link"
 import { FreeAgentsTab } from "#/components/seasons/free-agents-tab"
 import { RegisterTab } from "#/components/seasons/register-tab"
 import { RegistrationPricing } from "#/components/seasons/registration-pricing"
+import { RegularSeasonMVP } from "#/components/seasons/regular-season-mvp"
 import { ScheduleTab } from "#/components/seasons/schedule-tab"
 import { SeasonStatsTab } from "#/components/seasons/season-stats-tab"
 import { StandingsTab } from "#/components/seasons/standings-tab"
@@ -21,6 +22,7 @@ import { WeeklySubsTab } from "#/components/seasons/weekly-subs-tab"
 import { Badge } from "#/components/ui/badge"
 import { Breadcrumb } from "#/components/ui/breadcrumb"
 import { PageContainer } from "#/components/ui/page-container"
+import { SectionBlock } from "#/components/ui/section-block"
 import { Tabs } from "#/components/ui/tabs"
 import { ROSTER_MINIMUM } from "#/server/domain/seasons"
 
@@ -116,6 +118,7 @@ function RouteComponent() {
 					startDate={season.startDate}
 					weeks={season.weeks}
 				/>
+				<RegularSeasonMVP mvp={season.regularSeasonMvp} />
 				<Tabs>
 					{tabs.map((tab) => (
 						<Tabs.StateTab

@@ -2,9 +2,9 @@ import { DateTime } from "luxon"
 import { css } from "styled-system/css"
 import { Grid } from "styled-system/jsx"
 import type { ScheduleWeek } from "#/server/domain/schedule"
+import { MVPCard } from "../mvp/mvp-card"
 import { Badge } from "../ui/badge"
 import { WeekGameCard } from "./week-game-card"
-import { WeekMVP } from "./week-mvp"
 
 type Props = {
 	league: { location: string; slug: string }
@@ -65,7 +65,7 @@ export function WeekGroup({
 				{week.mvps.length > 0 && (
 					<Grid gap="3" gridTemplateColumns={"repeat(2, 1fr)"}>
 						{week.mvps.map((mvp) => (
-							<WeekMVP key={mvp.userId} mvp={mvp} />
+							<MVPCard category="week" key={mvp.userId} mvp={mvp} />
 						))}
 					</Grid>
 				)}
