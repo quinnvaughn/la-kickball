@@ -55,19 +55,19 @@ function Home() {
 					>
 						<BenefitItem
 							heading="A profile that tracks your stats"
-							text="Your stats carry across seasons, tied to your own profile, not locked inside one team's spreadsheet."
+							text="Every game you play adds to your stats, tied to your own profile across every season you play."
 						/>
 						<BenefitItem
-							heading="Ref-logged box scores"
-							text="A ref records the game, so the score and stats come from the same source every time."
+							heading="Full box scores, play by play"
+							text="Every game gets a complete box score and a play-by-play log, right on the game page as soon as the ref logs it."
 						/>
 						<BenefitItem
 							heading="Free agent options"
-							text="Join a team that's open to free agents for the full season. Teams can also request a sub for a single week when they're short players, with priority always going to full-season players."
+							text="Sign up as a free agent and join a team that's open, or pick up a single-week sub when a team's short. Full-season players get first pick of open sub spots."
 						/>
 						<BenefitItem
-							heading="One set of rules"
-							text="The same rules apply across every league, not whatever a given field or captain decides that day."
+							heading="Consistent rules, every game"
+							text="Every league plays by the same rulebook, week to week and ref to ref."
 						/>
 					</div>
 				</SectionBlock>
