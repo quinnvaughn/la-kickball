@@ -1,3 +1,5 @@
+import type { Week } from "../db/schema/weeks"
+
 export interface CareerTotals {
 	userId: string
 	firstName: string
@@ -244,6 +246,23 @@ export function buildTopStats(
 export interface FreeAgentListing extends PlayerAvailabilitySummary {
 	availabilityId: string
 	invited: boolean
+}
+
+// The Weekly Subs tab's full payload — the players available to pick up,
+// plus the week they're available for (null if the season has no
+// Sunday-Saturday span matching today, e.g. off-season). Kept together
+// since a listing without its week is ambiguous about what "available"
+// means.
+export interface WeeklySubs {
+	week: Week | null
+	players: FreeAgentListing[]
+	// Both scoped to the viewer, and only meaningful for a signed-in one —
+	// they gate the "mark yourself available" button, which is hidden
+	// whenever either is true (already covered for the week, no need to
+	// open up further) and always shown to a signed-out visitor (who by
+	// definition has neither).
+	viewerIsOnTeamForWeek: boolean
+	viewerHasOpenAvailability: boolean
 }
 
 // Surfaces just the single standout stat, for the free-agent/weekly-sub

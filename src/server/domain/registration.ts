@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, or } from "drizzle-orm"
 import { db } from "../db"
 import {
 	freeAgentAvailability,
@@ -50,6 +50,33 @@ export async function isUserRegisteredForSeason(
 		.limit(1)
 
 	return !!availability
+}
+
+// Whether a user already has a roster spot covering the given week —
+// either a season-long spot (weekId null, covers every week) or a one-off
+// weekly-sub pickup for this exact week. Used to gate the Weekly Subs
+// tab's "mark yourself available" button: a player already rostered for
+// the week, permanently or as a picked-up sub, has nothing to open
+// themselves up for.
+export async function isUserOnTeamForWeek(
+	userId: string,
+	weekId: string,
+	seasonId: string,
+): Promise<boolean> {
+	const [membership] = await db
+		.select({ id: teamMemberships.id })
+		.from(teamMemberships)
+		.innerJoin(teams, eq(teamMemberships.teamId, teams.id))
+		.where(
+			and(
+				eq(teamMemberships.userId, userId),
+				eq(teams.seasonId, seasonId),
+				or(isNull(teamMemberships.weekId), eq(teamMemberships.weekId, weekId)),
+			),
+		)
+		.limit(1)
+
+	return !!membership
 }
 
 // Season-long captain roster spot only (weekId null) — a captain's

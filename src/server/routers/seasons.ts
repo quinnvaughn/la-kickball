@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server"
-import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm"
+import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import z from "zod"
 import { db } from "../db"
 import { isUniqueConstraintError } from "../db/errors"
@@ -17,6 +17,7 @@ import {
 } from "../db/schema"
 import {
 	getCaptainTeamIdForUser,
+	isUserOnTeamForWeek,
 	isUserRegisteredForSeason,
 } from "../domain/registration"
 import {
@@ -36,6 +37,7 @@ import {
 	type FreeAgentListing,
 	type PlayerAvailabilitySummary,
 	WEEK_MVP_STAT_CATEGORIES,
+	type WeeklySubs,
 } from "../domain/stats"
 import { protectedProcedure, publicProcedure, router } from "../trpc"
 
@@ -150,15 +152,30 @@ async function freeAgentUserIdsForSeason(seasonId: string): Promise<string[]> {
 	return rows.map((row) => row.userId)
 }
 
-// The week closest to today within the season — during the regular
-// season/playoffs this is effectively "this week," which is what the
-// Weekly Subs tab is asking "available for."
+// The week whose game date falls within the current Sunday-Saturday
+// span — during the regular season/playoffs this is effectively "this
+// week," which is what the Weekly Subs tab is asking "available for."
+// Weeks run Sunday-Saturday regardless of which day games are actually
+// played on, so this is a fixed calendar-week lookup, not "nearest game
+// date" (that would drift the rollover day depending on the season's
+// day of week).
 async function currentWeekForSeason(seasonId: string) {
+	// Postgres's date_trunc('week', ...) truncates to Monday; shifting the
+	// input forward a day before truncating (and back a day after) turns
+	// that into a Sunday-anchored start-of-week.
+	const startOfWeek = sql`date_trunc('week', current_date + 1) - interval '1 day'`
+
 	const [week] = await db
 		.select()
 		.from(weeks)
-		.where(and(eq(weeks.seasonId, seasonId), isNotNull(weeks.date)))
-		.orderBy(sql`abs(${weeks.date} - current_date)`)
+		.where(
+			and(
+				eq(weeks.seasonId, seasonId),
+				isNotNull(weeks.date),
+				gte(weeks.date, sql`(${startOfWeek})::date`),
+				lt(weeks.date, sql`(${startOfWeek} + interval '7 days')::date`),
+			),
+		)
 		.limit(1)
 
 	return week ?? null
@@ -503,6 +520,15 @@ export const seasonsRouter = router({
 				weeklySubAvailability.map((row) => [row.userId, row.availabilityId]),
 			)
 
+			const viewerHasOpenAvailability = ctx.user
+				? weeklySubAvailabilityIds.has(ctx.user.id)
+				: false
+
+			const viewerIsOnTeamForWeek =
+				ctx.user && currentWeek
+					? await isUserOnTeamForWeek(ctx.user.id, currentWeek.id, season.id)
+					: false
+
 			const invitedAvailabilityIds = myCaptainTeamId
 				? await invitedAvailabilityIdsForTeam(myCaptainTeamId, [
 						...freeAgentAvailabilityIds.values(),
@@ -539,7 +565,9 @@ export const seasonsRouter = router({
 						weeklySubAvailabilityIds,
 						invitedAvailabilityIds,
 					),
-				},
+					viewerIsOnTeamForWeek,
+					viewerHasOpenAvailability,
+				} satisfies WeeklySubs,
 				standings,
 				schedule: buildSchedule(scheduleWeeks),
 			}
@@ -590,6 +618,45 @@ export const seasonsRouter = router({
 					throw new TRPCError({
 						code: "CONFLICT",
 						message: "You've already invited this player.",
+					})
+				}
+
+				throw error
+			}
+		}),
+
+	// A player opening themselves up to be picked up as a weekly sub for
+	// the season's current (Sunday-Saturday) week — the same
+	// freeAgentAvailability row a season-long free-agent signup uses, just
+	// scoped to this one week instead of picked up later by
+	// freeAgentUserIdsForSeason.
+	markAvailableForWeek: protectedProcedure
+		.input(z.object({ seasonId: z.string() }))
+		.mutation(async ({ input, ctx }) => {
+			const currentWeek = await currentWeekForSeason(input.seasonId)
+
+			if (!currentWeek) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "No week is currently open for weekly subs.",
+				})
+			}
+
+			try {
+				const [availability] = await db
+					.insert(freeAgentAvailability)
+					.values({
+						userId: ctx.user.id,
+						weekId: currentWeek.id,
+					})
+					.returning()
+
+				return availability
+			} catch (error) {
+				if (isUniqueConstraintError(error)) {
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: "You've already marked yourself available for this week.",
 					})
 				}
 

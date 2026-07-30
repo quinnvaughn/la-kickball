@@ -3,8 +3,8 @@ import { css } from "styled-system/css"
 import { VStack } from "styled-system/jsx"
 import type { Schedule } from "#/server/domain/schedule"
 import { SectionBlock } from "../ui/section-block"
+import { WeekGroup } from "../week/week-group"
 import { EmptyTabContainer } from "./empty-tab-container"
-import { WeekGroup } from "./week-group"
 
 type Props = {
 	schedule: Schedule

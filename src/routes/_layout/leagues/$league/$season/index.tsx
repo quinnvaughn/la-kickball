@@ -16,6 +16,7 @@ import {
 	getSeasonProgressLabel,
 	getSeasonTabs,
 } from "#/components/seasons/utils"
+import { WeeklySubsTab } from "#/components/seasons/weekly-subs-tab"
 import { Badge } from "#/components/ui/badge"
 import { Breadcrumb } from "#/components/ui/breadcrumb"
 import { PageContainer } from "#/components/ui/page-container"
@@ -156,6 +157,13 @@ function RouteComponent() {
 							}}
 							schedule={season.schedule}
 							seasonStart={season.startDate}
+						/>
+					))
+					.with("weekly-subs", () => (
+						<WeeklySubsTab
+							seasonId={season.id}
+							captainTeamId={season.myCaptainTeamId}
+							weeklySubs={season.weeklySubs}
 						/>
 					))
 					.otherwise(() => null)}

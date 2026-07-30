@@ -3,8 +3,8 @@ import { css } from "styled-system/css"
 import { Grid } from "styled-system/jsx"
 import type { ScheduleWeek } from "#/server/domain/schedule"
 import { Badge } from "../ui/badge"
-import { WeekMVP } from "../week/week-mvp"
 import { WeekGameCard } from "./week-game-card"
+import { WeekMVP } from "./week-mvp"
 
 type Props = {
 	league: { location: string; slug: string }
