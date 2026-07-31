@@ -16,7 +16,8 @@ type SeasonMVPProps = {
 
 type Props = WeekProps | SeasonMVPProps
 
-export function MVPCard({ mvp, category = "week" }: Props) {
+export function MVPCard(props: Props) {
+	const { mvp } = props
 	return (
 		<div
 			className={css({
@@ -63,9 +64,10 @@ export function MVPCard({ mvp, category = "week" }: Props) {
 				{" · "}
 				{mvp.topStats.map(
 					(ts, i) =>
-						`${formatStat(ts.key, ts.perGame)}${i < mvp.topStats.length - 1 ? " · " : ""}`,
+						`${formatStat(ts.key, ts.total)}${i < mvp.topStats.length - 1 ? " · " : ""}`,
 				)}
-				{category === "season" && " across the regular season"}
+				{props.category === "season" &&
+					` across ${props.mvp.games} ${props.mvp.games === 1 ? "game" : "games"}`}
 			</div>
 		</div>
 	)

@@ -2,16 +2,18 @@
 -- pages, schedules, box scores, career leaders, MVP awards, open-team
 -- signups, free agents) has something real to render against.
 --
--- Fully self-contained: creates the "cheviot-hills" league and its five
+-- Fully self-contained: creates the "cheviot-hills" league and its six
 -- seasons itself, with every date computed relative to CURRENT_DATE, so
 -- the seasons are always in the right lifecycle stage no matter when this
--- is run. The five seasons cover:
---   - future:    registration open, starts ~2.5 months out
---   - soon:      registration open, starts within the next two weeks
---   - active:    regular season in progress (partway through its weeks)
---   - playoffs:  regular season done, semifinals played, final scheduled
---                but not yet played
---   - completed: entire season finished, final played, winner recorded
+-- is run. The six seasons cover:
+--   - future:        registration open, starts ~2.5 months out
+--   - soon:          registration open, starts within the next two weeks
+--   - active:        regular season in progress (partway through its weeks)
+--   - quarterfinals: 8-team bracket, regular season done, quarterfinals
+--                    played, semifinals scheduled but not yet played
+--   - playoffs:      regular season done, semifinals played, final scheduled
+--                    but not yet played
+--   - completed:     entire season finished, final played, winner recorded
 --
 -- Destructive by design: this deletes any existing "cheviot-hills" league
 -- (which cascades away its seasons/teams/weeks/games/stats) and any
@@ -151,6 +153,16 @@ DECLARE
 		ARRAY[1,3,4,2,5,6],
 		ARRAY[1,2,3,6,4,5]
 	];
+	-- Standard 8-team round-robin (circle method): 7 rounds, 4 pairs each.
+	pairing_sets_8 int[][] := ARRAY[
+		ARRAY[1,8,2,7,3,6,4,5],
+		ARRAY[1,7,8,6,2,5,3,4],
+		ARRAY[1,6,7,5,8,4,2,3],
+		ARRAY[1,5,6,4,7,3,8,2],
+		ARRAY[1,4,5,3,6,2,7,8],
+		ARRAY[1,3,4,2,5,8,6,7],
+		ARRAY[1,2,3,8,4,7,5,6]
+	];
 	active_pairing_sets int[][];
 	round_count int;
 	num_games int;
@@ -167,10 +179,25 @@ DECLARE
 	final_id uuid;
 	final_winner uuid;
 	mvp_candidate uuid;
+	qf1_id uuid;
+	qf2_id uuid;
+	qf3_id uuid;
+	qf4_id uuid;
+	qf1_winner uuid;
+	qf2_winner uuid;
+	qf3_winner uuid;
+	qf4_winner uuid;
+	qf1_winner_idx int;
+	qf2_winner_idx int;
+	qf3_winner_idx int;
+	qf4_winner_idx int;
 BEGIN
 	SELECT * INTO v_season FROM seasons WHERE id = p_season_id;
 
-	IF p_team_count = 6 THEN
+	IF p_team_count = 8 THEN
+		active_pairing_sets := pairing_sets_8;
+		round_count := 7;
+	ELSIF p_team_count = 6 THEN
 		active_pairing_sets := pairing_sets_6;
 		round_count := 5;
 	ELSE
@@ -440,7 +467,91 @@ BEGIN
 		VALUES (gen_random_uuid(), NULL, p_season_id, 'regular', mvp_candidate);
 	END IF;
 
-	IF p_add_playoffs THEN
+	IF p_add_playoffs AND p_team_count = 8 THEN
+		-- 8-team bracket, stopped right after quarterfinals: this is the
+		-- only playoff stage seed_season builds for an 8-team season, so
+		-- p_final_played is ignored here — quarterfinals are played,
+		-- semifinal matchups are set from the QF winners, but not played.
+		week_id := gen_random_uuid();
+		week_date := COALESCE(v_season.start_date, CURRENT_DATE) + (p_total_weeks * 7);
+		INSERT INTO weeks (id, season_id, week_number, date)
+		VALUES (week_id, p_season_id, p_total_weeks + 1, week_date);
+
+		-- QF1: teams[1] v teams[8]
+		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+		LOOP
+			home_score := 3 + floor(random() * 13)::int;
+			away_score := 3 + floor(random() * 13)::int;
+			EXIT WHEN home_score <> away_score;
+		END LOOP;
+		qf1_id := gen_random_uuid();
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
+		VALUES (qf1_id, week_id, team_ids[1], team_ids[8], 'quarterfinal', 'Field 1', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		qf1_winner_idx := CASE WHEN home_score > away_score THEN 1 ELSE 8 END;
+		qf1_winner := team_ids[qf1_winner_idx];
+		PERFORM pg_temp.seed_game_logs(qf1_id, shuffled_players[1:p_roster_size]);
+		PERFORM pg_temp.seed_game_logs(qf1_id, shuffled_players[(7 * p_roster_size + 1):(8 * p_roster_size)]);
+
+		-- QF2: teams[2] v teams[7]
+		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+		LOOP
+			home_score := 3 + floor(random() * 13)::int;
+			away_score := 3 + floor(random() * 13)::int;
+			EXIT WHEN home_score <> away_score;
+		END LOOP;
+		qf2_id := gen_random_uuid();
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
+		VALUES (qf2_id, week_id, team_ids[2], team_ids[7], 'quarterfinal', 'Field 2', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		qf2_winner_idx := CASE WHEN home_score > away_score THEN 2 ELSE 7 END;
+		qf2_winner := team_ids[qf2_winner_idx];
+		PERFORM pg_temp.seed_game_logs(qf2_id, shuffled_players[(p_roster_size + 1):(2 * p_roster_size)]);
+		PERFORM pg_temp.seed_game_logs(qf2_id, shuffled_players[(6 * p_roster_size + 1):(7 * p_roster_size)]);
+
+		-- QF3: teams[3] v teams[6]
+		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+		LOOP
+			home_score := 3 + floor(random() * 13)::int;
+			away_score := 3 + floor(random() * 13)::int;
+			EXIT WHEN home_score <> away_score;
+		END LOOP;
+		qf3_id := gen_random_uuid();
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
+		VALUES (qf3_id, week_id, team_ids[3], team_ids[6], 'quarterfinal', 'Field 3', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		qf3_winner_idx := CASE WHEN home_score > away_score THEN 3 ELSE 6 END;
+		qf3_winner := team_ids[qf3_winner_idx];
+		PERFORM pg_temp.seed_game_logs(qf3_id, shuffled_players[(2 * p_roster_size + 1):(3 * p_roster_size)]);
+		PERFORM pg_temp.seed_game_logs(qf3_id, shuffled_players[(5 * p_roster_size + 1):(6 * p_roster_size)]);
+
+		-- QF4: teams[4] v teams[5]
+		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+		LOOP
+			home_score := 3 + floor(random() * 13)::int;
+			away_score := 3 + floor(random() * 13)::int;
+			EXIT WHEN home_score <> away_score;
+		END LOOP;
+		qf4_id := gen_random_uuid();
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
+		VALUES (qf4_id, week_id, team_ids[4], team_ids[5], 'quarterfinal', 'Field 4', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		qf4_winner_idx := CASE WHEN home_score > away_score THEN 4 ELSE 5 END;
+		qf4_winner := team_ids[qf4_winner_idx];
+		PERFORM pg_temp.seed_game_logs(qf4_id, shuffled_players[(3 * p_roster_size + 1):(4 * p_roster_size)]);
+		PERFORM pg_temp.seed_game_logs(qf4_id, shuffled_players[(4 * p_roster_size + 1):(5 * p_roster_size)]);
+
+		-- Semifinals: matchups are set from the QF winners, but nobody's
+		-- played yet — this is the "just past quarterfinals" state.
+		week_id := gen_random_uuid();
+		week_date := COALESCE(v_season.start_date, CURRENT_DATE) + ((p_total_weeks + 1) * 7);
+		INSERT INTO weeks (id, season_id, week_number, date)
+		VALUES (week_id, p_season_id, p_total_weeks + 2, week_date);
+
+		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id)
+		VALUES (gen_random_uuid(), week_id, qf1_winner, qf2_winner, 'semifinal', 'Field 1', v_season.start_time, ref_id);
+
+		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
+		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id)
+		VALUES (gen_random_uuid(), week_id, qf3_winner, qf4_winner, 'semifinal', 'Field 2', v_season.start_time, ref_id);
+	ELSIF p_add_playoffs THEN
 		-- Semifinals: teams[1] v teams[2], teams[3] v teams[4] — already played.
 		week_id := gen_random_uuid();
 		week_date := COALESCE(v_season.start_date, CURRENT_DATE) + (p_total_weeks * 7);
@@ -535,11 +646,12 @@ DECLARE
 	v_future_id uuid;
 	v_soon_id uuid;
 	v_active_id uuid;
+	v_quarterfinals_id uuid;
 	v_playoffs_id uuid;
 	v_completed_id uuid;
 
 	-- Every season's lifecycle stage is defined purely as an offset from
-	-- today, so re-running this script always reproduces the same five
+	-- today, so re-running this script always reproduces the same six
 	-- stages relative to "now" — "today" meaning the current date in LA,
 	-- where the league actually plays, not whatever timezone the DB
 	-- session happens to be in. Each start date is then snapped onto the
@@ -554,13 +666,25 @@ DECLARE
 	-- badges "this week" — matching p_completed_weeks=3/p_post_next_week=true
 	-- below, which seeds week 4 as the in-progress one.
 	v_active_start date := pg_temp.week_anchor(v_today, 'saturday') - 21; -- 3 weeks into an 8-week regular season
-	v_playoffs_start date := pg_temp.week_anchor(v_today - 59, 'saturday'); -- regular season done, mid-playoffs
+	-- Week 9 (quarterfinals, p_total_weeks + 1) lands a couple of days in
+	-- the past and week 10 (semifinals, p_total_weeks + 2) a few days out,
+	-- so quarterfinals read as played and semifinals as scheduled-not-played.
+	v_quarterfinals_start date := pg_temp.week_anchor(v_today - 58, 'tuesday');
+	-- -63 (not -59): the season-card badge (season-card.tsx) buckets purely
+	-- off startDate + weeks, independent of actual game data — anything
+	-- less than 63 days back can land inside its 8-week "In Progress"
+	-- window instead of "Playoffs" once week_anchor's up-to-6-day snap is
+	-- applied, which would make a season with semifinals already played
+	-- (and a regular-season MVP already awarded) still read as in-progress.
+	-- -63 keeps this in the "Playoffs" bucket for every day of the year.
+	v_playoffs_start date := pg_temp.week_anchor(v_today - 63, 'saturday'); -- regular season done, mid-playoffs
 	v_completed_start date := pg_temp.week_anchor(v_today - 120, 'sunday'); -- entire season + playoffs long finished
 
 	first_names text[] := ARRAY['Alex','Jordan','Taylor','Morgan','Casey','Riley','Jamie','Cameron','Avery','Quinn','Drew','Reese','Rowan','Skyler','Dakota','Emerson','Finley','Hayden','Kendall','Peyton'];
 	last_names text[] := ARRAY['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Wilson','Anderson','Thomas','Clark','Moore','Jackson','Martin','Lee'];
 	playoffs_team_names text[] := ARRAY['Sole Purpose','Kicked Out','Punt Intended','Kick-Ass Krew'];
 	active_team_names text[] := ARRAY['The Base Invaders','Sneaker Squad','Rubber Ballers','The Diamond Divas','Sole Crushers','Turf Titans'];
+	quarterfinals_team_names text[] := ARRAY['Fowl Territory','Grass Kickers','Rally Kickers','Kick Six','Diamond Dynasty','The Kicking Dead','Balls to the Wall','Old School Kickers'];
 	soon_team_names text[] := ARRAY['Kick Start','Early Birds','Fresh Kicks','Warm-Up Act'];
 	future_team_names text[] := ARRAY['Turf Wars','Home Run Kickers','Cleat Street','Grass Stains'];
 	completed_team_names text[] := ARRAY['Kickin'' Chicken','Foul Balls','The Kick-Offs','Ball Busters'];
@@ -646,6 +770,29 @@ BEGIN
 	)
 	RETURNING id INTO v_active_id;
 
+	-- 'mens', not 'coed': v_quarterfinals_start lands in the same quarter
+	-- as v_playoffs_start (both need a similar "next round is imminent"
+	-- offset from today), so matching the playoffs season's 'coed'
+	-- division here would collide on the (league_id, slug) unique
+	-- constraint. Mens also means this season's regular-season MVPs
+	-- exercise the single-winner path instead of duplicating coed's
+	-- guy/girl split, which active/playoffs already cover.
+	INSERT INTO seasons (id, season, year, division, slug, league_id, day_of_week, start_time, end_time, start_date, weeks)
+	VALUES (
+		gen_random_uuid(),
+		pg_temp.season_quarter_label(v_quarterfinals_start),
+		EXTRACT(YEAR FROM v_quarterfinals_start)::smallint,
+		'mens',
+		pg_temp.season_quarter_label(v_quarterfinals_start) || '-' || EXTRACT(YEAR FROM v_quarterfinals_start)::int || '-mens',
+		v_league_id,
+		'tuesday',
+		'19:00',
+		'21:00',
+		v_quarterfinals_start,
+		8
+	)
+	RETURNING id INTO v_quarterfinals_id;
+
 	INSERT INTO seasons (id, season, year, division, slug, league_id, day_of_week, start_time, end_time, start_date, weeks)
 	VALUES (
 		gen_random_uuid(),
@@ -716,6 +863,11 @@ BEGIN
 	-- 56-player pool. Week 1's first game is suspended (rained out early)
 	-- so there's a real example of that status in a past week.
 	PERFORM pg_temp.seed_season(v_active_id, 6, 8, 8, 3, false, false, true, true, active_team_names, player_pool, ref_pool);
+
+	-- Quarterfinals: 8-team bracket, regular season complete, quarterfinals
+	-- played, semifinal matchups set from the QF winners but not played yet.
+	-- Roster size 6 (48 players) keeps 8 teams within the shared 56-player pool.
+	PERFORM pg_temp.seed_season(v_quarterfinals_id, 8, 6, 8, 8, true, false, false, false, quarterfinals_team_names, player_pool, ref_pool);
 
 	-- Playoffs: regular season complete, semifinals played, final scheduled but not played.
 	PERFORM pg_temp.seed_season(v_playoffs_id, 4, 10, 8, 8, true, false, false, false, playoffs_team_names, player_pool, ref_pool);

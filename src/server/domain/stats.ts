@@ -205,6 +205,10 @@ export interface PlayerTopStat {
 	key: PerGameStatCategory
 	label: string
 	perGame: number
+	// Raw count over the ranked scope (a week's games, or every game in a
+	// season) — the MVP card shows this instead of perGame, since a season
+	// MVP reads better as "28 Runs across 12 games" than an averaged rate.
+	total: number
 }
 
 // Spelled-out singular/plural names for the stat categories that show up
@@ -265,6 +269,7 @@ export function buildTopStats(
 			key,
 			label: STAT_LABELS.get(key) ?? key,
 			perGame: row[key] / row.games,
+			total: row[key],
 		}))
 }
 
