@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useLoaderData } from "@tanstack/react-router"
 import { useState } from "react"
 import { css } from "styled-system/css"
 import { HStack, VStack } from "styled-system/jsx"
@@ -29,13 +29,10 @@ import { ROSTER_MINIMUM } from "#/server/domain/seasons"
 
 export const Route = createFileRoute("/_layout/leagues/$league/$season/")({
 	component: RouteComponent,
-	loader: async ({ context: { trpc }, params: { league, season } }) => {
-		return trpc.seasons.bySlug.query({ leagueSlug: league, seasonSlug: season })
-	},
 })
 
 function RouteComponent() {
-	const season = Route.useLoaderData()
+	const season = useLoaderData({ from: "/_layout/leagues/$league/$season" })
 	const { league, season: seasonSlug } = Route.useParams()
 	const phase = season.startDate
 		? getSeasonPhase(season.startDate, season.weeks)

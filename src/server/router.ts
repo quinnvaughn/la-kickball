@@ -1,6 +1,7 @@
 import type { inferRouterOutputs } from "@trpc/server"
 import { z } from "zod"
 import { authRouter } from "./routers/auth"
+import { gamesRouter } from "./routers/games"
 import { leaguesRouter } from "./routers/leagues"
 import { seasonsRouter } from "./routers/seasons"
 import { publicProcedure, router } from "./trpc"
@@ -19,6 +20,7 @@ export const appRouter = router({
 	auth: authRouter,
 	leagues: leaguesRouter,
 	seasons: seasonsRouter,
+	games: gamesRouter,
 })
 
 export type AppRouter = typeof appRouter

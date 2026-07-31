@@ -14,6 +14,7 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutRulesRouteImport } from './routes/_layout/rules'
 import { Route as ApiTrpcSplatRouteImport } from './routes/api/trpc/$'
 import { Route as LayoutLeaguesLeagueIndexRouteImport } from './routes/_layout/leagues/$league/index'
+import { Route as LayoutLeaguesLeagueSeasonRouteImport } from './routes/_layout/leagues/$league/$season'
 import { Route as LayoutLeaguesLeagueStatsRouteImport } from './routes/_layout/leagues/$league/stats'
 import { Route as LayoutUserUserIdIndexRouteImport } from './routes/_layout/user/$userId/index'
 import { Route as LayoutLeaguesLeagueSeasonIndexRouteImport } from './routes/_layout/leagues/$league/$season/index'
@@ -48,6 +49,12 @@ const LayoutLeaguesLeagueIndexRoute =
     path: '/leagues/$league/',
     getParentRoute: () => LayoutRoute,
   } as any)
+const LayoutLeaguesLeagueSeasonRoute =
+  LayoutLeaguesLeagueSeasonRouteImport.update({
+    id: '/leagues/$league/$season',
+    path: '/leagues/$league/$season',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 const LayoutLeaguesLeagueStatsRoute =
   LayoutLeaguesLeagueStatsRouteImport.update({
     id: '/leagues/$league/stats',
@@ -61,45 +68,46 @@ const LayoutUserUserIdIndexRoute = LayoutUserUserIdIndexRouteImport.update({
 } as any)
 const LayoutLeaguesLeagueSeasonIndexRoute =
   LayoutLeaguesLeagueSeasonIndexRouteImport.update({
-    id: '/leagues/$league/$season/',
-    path: '/leagues/$league/$season/',
-    getParentRoute: () => LayoutRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => LayoutLeaguesLeagueSeasonRoute,
   } as any)
 const LayoutLeaguesLeagueSeasonCreateTeamRoute =
   LayoutLeaguesLeagueSeasonCreateTeamRouteImport.update({
-    id: '/leagues/$league/$season/create-team',
-    path: '/leagues/$league/$season/create-team',
-    getParentRoute: () => LayoutRoute,
+    id: '/create-team',
+    path: '/create-team',
+    getParentRoute: () => LayoutLeaguesLeagueSeasonRoute,
   } as any)
 const LayoutLeaguesLeagueSeasonFreeAgentRoute =
   LayoutLeaguesLeagueSeasonFreeAgentRouteImport.update({
-    id: '/leagues/$league/$season/free-agent',
-    path: '/leagues/$league/$season/free-agent',
-    getParentRoute: () => LayoutRoute,
+    id: '/free-agent',
+    path: '/free-agent',
+    getParentRoute: () => LayoutLeaguesLeagueSeasonRoute,
   } as any)
 const LayoutLeaguesLeagueSeasonStatsRoute =
   LayoutLeaguesLeagueSeasonStatsRouteImport.update({
-    id: '/leagues/$league/$season/stats',
-    path: '/leagues/$league/$season/stats',
-    getParentRoute: () => LayoutRoute,
+    id: '/stats',
+    path: '/stats',
+    getParentRoute: () => LayoutLeaguesLeagueSeasonRoute,
   } as any)
 const LayoutLeaguesLeagueSeasonGameGameIdIndexRoute =
   LayoutLeaguesLeagueSeasonGameGameIdIndexRouteImport.update({
-    id: '/leagues/$league/$season/game/$gameId/',
-    path: '/leagues/$league/$season/game/$gameId/',
-    getParentRoute: () => LayoutRoute,
+    id: '/game/$gameId/',
+    path: '/game/$gameId/',
+    getParentRoute: () => LayoutLeaguesLeagueSeasonRoute,
   } as any)
 const LayoutLeaguesLeagueSeasonTeamTeamIdIndexRoute =
   LayoutLeaguesLeagueSeasonTeamTeamIdIndexRouteImport.update({
-    id: '/leagues/$league/$season/team/$teamId/',
-    path: '/leagues/$league/$season/team/$teamId/',
-    getParentRoute: () => LayoutRoute,
+    id: '/team/$teamId/',
+    path: '/team/$teamId/',
+    getParentRoute: () => LayoutLeaguesLeagueSeasonRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
   '/rules': typeof LayoutRulesRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/leagues/$league/$season': typeof LayoutLeaguesLeagueSeasonRouteWithChildren
   '/leagues/$league/stats': typeof LayoutLeaguesLeagueStatsRoute
   '/leagues/$league/': typeof LayoutLeaguesLeagueIndexRoute
   '/user/$userId/': typeof LayoutUserUserIdIndexRoute
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   '/_layout/rules': typeof LayoutRulesRoute
   '/_layout/': typeof LayoutIndexRoute
   '/api/trpc/$': typeof ApiTrpcSplatRoute
+  '/_layout/leagues/$league/$season': typeof LayoutLeaguesLeagueSeasonRouteWithChildren
   '/_layout/leagues/$league/stats': typeof LayoutLeaguesLeagueStatsRoute
   '/_layout/leagues/$league/': typeof LayoutLeaguesLeagueIndexRoute
   '/_layout/user/$userId/': typeof LayoutUserUserIdIndexRoute
@@ -146,6 +155,7 @@ export interface FileRouteTypes {
     | '/'
     | '/rules'
     | '/api/trpc/$'
+    | '/leagues/$league/$season'
     | '/leagues/$league/stats'
     | '/leagues/$league/'
     | '/user/$userId/'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/_layout/rules'
     | '/_layout/'
     | '/api/trpc/$'
+    | '/_layout/leagues/$league/$season'
     | '/_layout/leagues/$league/stats'
     | '/_layout/leagues/$league/'
     | '/_layout/user/$userId/'
@@ -228,6 +239,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutLeaguesLeagueIndexRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/leagues/$league/$season': {
+      id: '/_layout/leagues/$league/$season'
+      path: '/leagues/$league/$season'
+      fullPath: '/leagues/$league/$season'
+      preLoaderRoute: typeof LayoutLeaguesLeagueSeasonRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/leagues/$league/stats': {
       id: '/_layout/leagues/$league/stats'
       path: '/leagues/$league/stats'
@@ -244,55 +262,50 @@ declare module '@tanstack/react-router' {
     }
     '/_layout/leagues/$league/$season/': {
       id: '/_layout/leagues/$league/$season/'
-      path: '/leagues/$league/$season'
+      path: '/'
       fullPath: '/leagues/$league/$season/'
       preLoaderRoute: typeof LayoutLeaguesLeagueSeasonIndexRouteImport
-      parentRoute: typeof LayoutRoute
+      parentRoute: typeof LayoutLeaguesLeagueSeasonRoute
     }
     '/_layout/leagues/$league/$season/create-team': {
       id: '/_layout/leagues/$league/$season/create-team'
-      path: '/leagues/$league/$season/create-team'
+      path: '/create-team'
       fullPath: '/leagues/$league/$season/create-team'
       preLoaderRoute: typeof LayoutLeaguesLeagueSeasonCreateTeamRouteImport
-      parentRoute: typeof LayoutRoute
+      parentRoute: typeof LayoutLeaguesLeagueSeasonRoute
     }
     '/_layout/leagues/$league/$season/free-agent': {
       id: '/_layout/leagues/$league/$season/free-agent'
-      path: '/leagues/$league/$season/free-agent'
+      path: '/free-agent'
       fullPath: '/leagues/$league/$season/free-agent'
       preLoaderRoute: typeof LayoutLeaguesLeagueSeasonFreeAgentRouteImport
-      parentRoute: typeof LayoutRoute
+      parentRoute: typeof LayoutLeaguesLeagueSeasonRoute
     }
     '/_layout/leagues/$league/$season/stats': {
       id: '/_layout/leagues/$league/$season/stats'
-      path: '/leagues/$league/$season/stats'
+      path: '/stats'
       fullPath: '/leagues/$league/$season/stats'
       preLoaderRoute: typeof LayoutLeaguesLeagueSeasonStatsRouteImport
-      parentRoute: typeof LayoutRoute
+      parentRoute: typeof LayoutLeaguesLeagueSeasonRoute
     }
     '/_layout/leagues/$league/$season/game/$gameId/': {
       id: '/_layout/leagues/$league/$season/game/$gameId/'
-      path: '/leagues/$league/$season/game/$gameId'
+      path: '/game/$gameId'
       fullPath: '/leagues/$league/$season/game/$gameId/'
       preLoaderRoute: typeof LayoutLeaguesLeagueSeasonGameGameIdIndexRouteImport
-      parentRoute: typeof LayoutRoute
+      parentRoute: typeof LayoutLeaguesLeagueSeasonRoute
     }
     '/_layout/leagues/$league/$season/team/$teamId/': {
       id: '/_layout/leagues/$league/$season/team/$teamId/'
-      path: '/leagues/$league/$season/team/$teamId'
+      path: '/team/$teamId'
       fullPath: '/leagues/$league/$season/team/$teamId/'
       preLoaderRoute: typeof LayoutLeaguesLeagueSeasonTeamTeamIdIndexRouteImport
-      parentRoute: typeof LayoutRoute
+      parentRoute: typeof LayoutLeaguesLeagueSeasonRoute
     }
   }
 }
 
-interface LayoutRouteChildren {
-  LayoutRulesRoute: typeof LayoutRulesRoute
-  LayoutIndexRoute: typeof LayoutIndexRoute
-  LayoutLeaguesLeagueStatsRoute: typeof LayoutLeaguesLeagueStatsRoute
-  LayoutLeaguesLeagueIndexRoute: typeof LayoutLeaguesLeagueIndexRoute
-  LayoutUserUserIdIndexRoute: typeof LayoutUserUserIdIndexRoute
+interface LayoutLeaguesLeagueSeasonRouteChildren {
   LayoutLeaguesLeagueSeasonCreateTeamRoute: typeof LayoutLeaguesLeagueSeasonCreateTeamRoute
   LayoutLeaguesLeagueSeasonFreeAgentRoute: typeof LayoutLeaguesLeagueSeasonFreeAgentRoute
   LayoutLeaguesLeagueSeasonStatsRoute: typeof LayoutLeaguesLeagueSeasonStatsRoute
@@ -301,22 +314,41 @@ interface LayoutRouteChildren {
   LayoutLeaguesLeagueSeasonTeamTeamIdIndexRoute: typeof LayoutLeaguesLeagueSeasonTeamTeamIdIndexRoute
 }
 
+const LayoutLeaguesLeagueSeasonRouteChildren: LayoutLeaguesLeagueSeasonRouteChildren =
+  {
+    LayoutLeaguesLeagueSeasonCreateTeamRoute:
+      LayoutLeaguesLeagueSeasonCreateTeamRoute,
+    LayoutLeaguesLeagueSeasonFreeAgentRoute:
+      LayoutLeaguesLeagueSeasonFreeAgentRoute,
+    LayoutLeaguesLeagueSeasonStatsRoute: LayoutLeaguesLeagueSeasonStatsRoute,
+    LayoutLeaguesLeagueSeasonIndexRoute: LayoutLeaguesLeagueSeasonIndexRoute,
+    LayoutLeaguesLeagueSeasonGameGameIdIndexRoute:
+      LayoutLeaguesLeagueSeasonGameGameIdIndexRoute,
+    LayoutLeaguesLeagueSeasonTeamTeamIdIndexRoute:
+      LayoutLeaguesLeagueSeasonTeamTeamIdIndexRoute,
+  }
+
+const LayoutLeaguesLeagueSeasonRouteWithChildren =
+  LayoutLeaguesLeagueSeasonRoute._addFileChildren(
+    LayoutLeaguesLeagueSeasonRouteChildren,
+  )
+
+interface LayoutRouteChildren {
+  LayoutRulesRoute: typeof LayoutRulesRoute
+  LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutLeaguesLeagueSeasonRoute: typeof LayoutLeaguesLeagueSeasonRouteWithChildren
+  LayoutLeaguesLeagueStatsRoute: typeof LayoutLeaguesLeagueStatsRoute
+  LayoutLeaguesLeagueIndexRoute: typeof LayoutLeaguesLeagueIndexRoute
+  LayoutUserUserIdIndexRoute: typeof LayoutUserUserIdIndexRoute
+}
+
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutRulesRoute: LayoutRulesRoute,
   LayoutIndexRoute: LayoutIndexRoute,
+  LayoutLeaguesLeagueSeasonRoute: LayoutLeaguesLeagueSeasonRouteWithChildren,
   LayoutLeaguesLeagueStatsRoute: LayoutLeaguesLeagueStatsRoute,
   LayoutLeaguesLeagueIndexRoute: LayoutLeaguesLeagueIndexRoute,
   LayoutUserUserIdIndexRoute: LayoutUserUserIdIndexRoute,
-  LayoutLeaguesLeagueSeasonCreateTeamRoute:
-    LayoutLeaguesLeagueSeasonCreateTeamRoute,
-  LayoutLeaguesLeagueSeasonFreeAgentRoute:
-    LayoutLeaguesLeagueSeasonFreeAgentRoute,
-  LayoutLeaguesLeagueSeasonStatsRoute: LayoutLeaguesLeagueSeasonStatsRoute,
-  LayoutLeaguesLeagueSeasonIndexRoute: LayoutLeaguesLeagueSeasonIndexRoute,
-  LayoutLeaguesLeagueSeasonGameGameIdIndexRoute:
-    LayoutLeaguesLeagueSeasonGameGameIdIndexRoute,
-  LayoutLeaguesLeagueSeasonTeamTeamIdIndexRoute:
-    LayoutLeaguesLeagueSeasonTeamTeamIdIndexRoute,
 }
 
 const LayoutRouteWithChildren =

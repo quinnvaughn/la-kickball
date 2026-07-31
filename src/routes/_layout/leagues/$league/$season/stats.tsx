@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router"
+import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router"
 import { css } from "styled-system/css"
 import z from "zod"
 import { Breadcrumb } from "#/components/ui/breadcrumb"
@@ -42,24 +42,20 @@ export const Route = createFileRoute("/_layout/leagues/$league/$season/stats")({
 		params: { league, season },
 		deps: { page, sortBy, sortDir },
 	}) => {
-		const [stats, seasonInfo] = await Promise.all([
-			trpc.seasons.stats.query({
-				leagueSlug: league,
-				seasonSlug: season,
-				sortBy,
-				sortDir,
-				page,
-				pageSize: PAGE_SIZE,
-			}),
-			trpc.seasons.bySlug.query({ leagueSlug: league, seasonSlug: season }),
-		])
-
-		return { stats, seasonInfo }
+		return trpc.seasons.stats.query({
+			leagueSlug: league,
+			seasonSlug: season,
+			sortBy,
+			sortDir,
+			page,
+			pageSize: PAGE_SIZE,
+		})
 	},
 })
 
 function RouteComponent() {
-	const { stats, seasonInfo } = Route.useLoaderData()
+	const stats = Route.useLoaderData()
+	const seasonInfo = useLoaderData({ from: "/_layout/leagues/$league/$season" })
 	const { league, season } = Route.useParams()
 	const { sortBy, sortDir } = Route.useSearch()
 	const navigate = Route.useNavigate()
