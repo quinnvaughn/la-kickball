@@ -13,6 +13,7 @@ export function Badge({ text, color = "teal", dot = false, className }: Props) {
 			className={cx(
 				css({
 					display: "inline-flex",
+					alignSelf: "flex-start",
 					alignItems: "center",
 					gap: "1.5",
 					fontFamily: "label",

@@ -4,6 +4,8 @@ import { css } from "styled-system/css"
 import { HStack, VStack } from "styled-system/jsx"
 import { match } from "ts-pattern"
 import { LeagueLocationLink } from "#/components/leagues/league-location-link"
+import { BracketTab } from "#/components/seasons/bracket-tab"
+import { ChampionBanner } from "#/components/seasons/champion-banner"
 import { FreeAgentsTab } from "#/components/seasons/free-agents-tab"
 import { RegisterTab } from "#/components/seasons/register-tab"
 import { RegistrationPricing } from "#/components/seasons/registration-pricing"
@@ -40,6 +42,27 @@ function RouteComponent() {
 		: "upcoming"
 	const tabs = getSeasonTabs(phase, season.isRegistered)
 	const [activeTab, setActiveTab] = useState(tabs[0].key)
+
+	const finalGame = season.bracket.final.games[0]
+	const champion =
+		season.winner && finalGame
+			? {
+					championName: season.winner.name,
+					championTeamId: season.winner.id,
+					opponentName:
+						finalGame.homeTeamId === season.winner.id
+							? finalGame.awayTeamName
+							: finalGame.homeTeamName,
+					championScore:
+						finalGame.homeTeamId === season.winner.id
+							? (finalGame.homeScore as number)
+							: (finalGame.awayScore as number),
+					opponentScore:
+						finalGame.homeTeamId === season.winner.id
+							? (finalGame.awayScore as number)
+							: (finalGame.homeScore as number),
+				}
+			: null
 
 	return (
 		<PageContainer>
@@ -113,6 +136,15 @@ function RouteComponent() {
 						</div>
 					</VStack>
 				</div>
+				{champion && (
+					<ChampionBanner
+						seasonLabel={season.name}
+						playoffMvp={season.playoffMvp}
+						league={season.league.slug}
+						season={season.slug}
+						{...champion}
+					/>
+				)}
 				<RegistrationPricing
 					startDate={season.startDate}
 					weeks={season.weeks}
@@ -178,7 +210,21 @@ function RouteComponent() {
 							season={seasonSlug}
 						/>
 					))
-					.otherwise(() => null)}
+					.with("bracket", () => (
+						<BracketTab
+							bracket={season.bracket}
+							schedule={season.schedule}
+							seasonStart={season.startDate}
+							league={{
+								location: season.league.locationName,
+								slug: season.league.slug,
+							}}
+							season={seasonSlug}
+							captainTeamId={season.myCaptainTeamId}
+							teamCount={season.teams.length}
+						/>
+					))
+					.exhaustive()}
 			</VStack>
 		</PageContainer>
 	)

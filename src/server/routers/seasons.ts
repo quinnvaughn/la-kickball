@@ -21,6 +21,7 @@ import {
 	isUserRegisteredForSeason,
 } from "../domain/registration"
 import {
+	buildBracket,
 	buildSchedule,
 	getGameStatus,
 	type ScheduleWeek,
@@ -710,6 +711,7 @@ export const seasonsRouter = router({
 				} satisfies WeeklySubs,
 				standings,
 				schedule: buildSchedule(scheduleWeeks),
+				bracket: buildBracket(scheduleWeeks),
 				seasonLeaders: buildCareerLeaders(seasonTotals.map(computeCareerStats)),
 				regularSeasonMvp,
 				playoffMvp,

@@ -5,7 +5,6 @@ import { css, cva, cx } from "styled-system/css"
 const barStyles = css({
 	display: "flex",
 	gap: "1",
-	marginTop: "6",
 	overflowX: "auto",
 })
 

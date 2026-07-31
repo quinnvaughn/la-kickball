@@ -72,7 +72,7 @@ export function getSeasonProgressLabel(
 		case "playoffs":
 			return "Playoffs"
 		case "completed":
-			return "League Completed"
+			return "Season complete"
 	}
 }
 

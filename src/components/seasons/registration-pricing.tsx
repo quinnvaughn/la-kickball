@@ -4,7 +4,7 @@ import { PRICING } from "#/server/domain/pricing"
 import {
 	getPricingTier,
 	getPricingTierDateLabels,
-	hasPlayoffsEnded,
+	getSeasonPhase,
 	type PricingTier,
 } from "./utils"
 
@@ -40,7 +40,10 @@ const tierCardActiveStyles = css({
 })
 
 export function RegistrationPricing({ startDate, weeks }: Props) {
-	if (startDate && hasPlayoffsEnded(startDate, weeks)) return null
+	if (startDate) {
+		const phase = getSeasonPhase(startDate, weeks)
+		if (phase === "playoffs" || phase === "completed") return null
+	}
 
 	const currentTier = startDate ? getPricingTier(startDate) : null
 	const dateLabels = startDate ? getPricingTierDateLabels(startDate) : null

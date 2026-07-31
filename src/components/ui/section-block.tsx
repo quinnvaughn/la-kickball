@@ -5,14 +5,23 @@ type Props = {
 	heading: string
 	children: React.ReactNode
 	stretch?: boolean
+	bottomBorder?: boolean
 }
 
-export function SectionBlock({ heading, children, stretch = false }: Props) {
+export function SectionBlock({
+	heading,
+	children,
+	stretch = false,
+	bottomBorder = false,
+}: Props) {
 	return (
 		<section
 			className={css({
 				py: "8",
 				width: "100%",
+				borderBottomColor: bottomBorder ? "border" : undefined,
+				borderBottomStyle: bottomBorder ? "solid" : undefined,
+				borderBottomWidth: bottomBorder ? "1px" : undefined,
 			})}
 		>
 			<VStack alignItems={stretch ? "stretch" : "start"} gap="5">

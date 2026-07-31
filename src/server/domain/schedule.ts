@@ -90,6 +90,86 @@ export interface ScheduleWeek {
 	mvps: WeekMvp[]
 }
 
+export interface BracketRound {
+	// The playoff week's own date row, not a computed offset from the
+	// regular season's end — a bye, rainout, or reschedule can shift a
+	// playoff week off the "every week is 7 days later" pattern, so this
+	// always reflects whatever weeks.date actually holds. Null if that
+	// week's date hasn't been set yet.
+	date: string | null
+	games: ScheduleGame[]
+}
+
+export interface Bracket {
+	quarterfinals: BracketRound
+	semifinals: BracketRound
+	final: BracketRound
+}
+
+// Which playoff rounds a season's bracket includes, based on team count —
+// not on whether games for that round exist in the DB yet (a round's games
+// often aren't created until the round before it finishes, but the bracket
+// tab still wants to show that round's slot as "coming up"). A real season
+// is never small enough to skip quarterfinals in practice (6 teams still
+// plays quarterfinals, just with two byes) — the smaller tiers mainly exist
+// so seed data with a handful of teams doesn't render a quarterfinals
+// section that could only ever have one real game in it.
+export function bracketRoundsForTeamCount(teamCount: number): GameRound[] {
+	if (teamCount >= 5) return ["quarterfinal", "semifinal", "final"]
+	if (teamCount >= 3) return ["semifinal", "final"]
+	if (teamCount >= 2) return ["final"]
+	return []
+}
+
+// Playoff games only, grouped by round — the raw material for the bracket
+// tab. Each round is assumed to live in a single week (quarterfinals week,
+// semifinals week, final week), so that week's date is attached alongside
+// its games rather than left for the UI to derive.
+export function buildBracket(weeks: ScheduleWeek[]): Bracket {
+	const sorted = [...weeks].sort((a, b) => a.weekNumber - b.weekNumber)
+
+	// Tracks whichever week the most recently resolved round landed on, so
+	// the next round (if nobody's advanced into it yet) knows where to look
+	// for its own week.
+	let previousWeekNumber: number | null = null
+
+	function roundData(round: GameRound): BracketRound {
+		const week = sorted.find((w) => w.games.some((g) => g.round === round))
+
+		if (week) {
+			previousWeekNumber = week.weekNumber
+			return {
+				date: week.date,
+				games: week.games.filter((g) => g.round === round),
+			}
+		}
+
+		// Nobody's reached this round yet, so there's no game to find its
+		// week by — but the week itself may already be on the calendar
+		// (e.g. a single-day playoff where the final's date is set
+		// alongside the semifinals', before the final's matchup is known).
+		// That week immediately follows whichever round was last resolved,
+		// and — having no games of its own yet — is otherwise empty.
+		const next =
+			previousWeekNumber !== null
+				? sorted.find((w) => w.weekNumber === (previousWeekNumber ?? 0) + 1)
+				: undefined
+
+		if (next && next.games.length === 0) {
+			previousWeekNumber = next.weekNumber
+			return { date: next.date, games: [] }
+		}
+
+		return { date: null, games: [] }
+	}
+
+	return {
+		quarterfinals: roundData("quarterfinal"),
+		semifinals: roundData("semifinal"),
+		final: roundData("final"),
+	}
+}
+
 export interface Schedule {
 	weeks: ScheduleWeek[]
 	// The week to default-open and badge as "current" on the schedule tab —
@@ -119,7 +199,18 @@ export function buildSchedule(
 	weeks: ScheduleWeek[],
 	now = new Date(),
 ): Schedule {
-	const dated = weeks.filter(
+	// Playoff games are surfaced separately via buildBracket, so the
+	// schedule only needs regular-season weeks/games. A week that's
+	// entirely playoff games (e.g. a quarterfinals week) drops out
+	// completely rather than showing up empty.
+	const regularSeasonWeeks = weeks
+		.map((week) => ({
+			...week,
+			games: week.games.filter((game) => game.round === "regular"),
+		}))
+		.filter((week) => week.games.length > 0)
+
+	const dated = regularSeasonWeeks.filter(
 		(week): week is ScheduleWeek & { date: string } => week.date !== null,
 	)
 
@@ -133,5 +224,5 @@ export function buildSchedule(
 		return weekDt >= startOfWeek && weekDt <= endOfWeek
 	})
 
-	return { weeks, currentWeekId: currentWeek?.id ?? null }
+	return { weeks: regularSeasonWeeks, currentWeekId: currentWeek?.id ?? null }
 }

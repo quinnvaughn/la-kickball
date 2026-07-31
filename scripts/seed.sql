@@ -551,6 +551,13 @@ BEGIN
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
 		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id)
 		VALUES (gen_random_uuid(), week_id, qf3_winner, qf4_winner, 'semifinal', 'Field 2', v_season.start_time, ref_id);
+
+		-- Final: matchup isn't known yet (semis haven't been played), but
+		-- this league runs semis and the final as a single championship
+		-- day — so the date is already on the calendar, same as the
+		-- semifinals' week, even though there's no game to hang it off of.
+		INSERT INTO weeks (id, season_id, week_number, date)
+		VALUES (gen_random_uuid(), p_season_id, p_total_weeks + 3, week_date);
 	ELSIF p_add_playoffs THEN
 		-- Semifinals: teams[1] v teams[2], teams[3] v teams[4] — already played.
 		week_id := gen_random_uuid();
@@ -918,7 +925,10 @@ BEGIN
 	-- other seeded player has a placeholder password_hash and can't
 	-- authenticate, so this swaps in a real argon2 hash (password:
 	-- "password123") on one team's captain slot to actually exercise the
-	-- captain view. Roster/team otherwise untouched.
+	-- captain view. Roster/team otherwise untouched. This same user is also
+	-- made captain of a team in the in-progress regular season below, so
+	-- there's a team with an active roster/upcoming week to exercise
+	-- "set lineup" against too.
 	SELECT id INTO soon_captain_team FROM teams WHERE season_id = v_soon_id ORDER BY name LIMIT 1;
 
 	real_captain_id := gen_random_uuid();
@@ -944,6 +954,13 @@ BEGIN
 	-- "no games logged" case.
 	SELECT id INTO active_next_week_id FROM weeks WHERE season_id = v_active_id AND week_number = 4;
 	SELECT id INTO active_team FROM teams WHERE season_id = v_active_id ORDER BY name LIMIT 1;
+
+	-- Same real captain login as above, also made captain of this
+	-- in-progress regular season team so "set lineup" can be exercised
+	-- against a real upcoming week (week 4), not just the pre-season team.
+	UPDATE team_memberships
+	SET user_id = real_captain_id
+	WHERE team_id = active_team AND is_captain = true;
 
 	availability_1 := gen_random_uuid();
 	INSERT INTO free_agent_availability (id, user_id, week_id) VALUES (availability_1, player_pool[3], active_next_week_id);
