@@ -1,9 +1,17 @@
-import { createFileRoute, Link, useLoaderData } from "@tanstack/react-router"
+import { createFileRoute, useLoaderData } from "@tanstack/react-router"
 import { DateTime } from "luxon"
+import { useState } from "react"
 import { css } from "styled-system/css"
-import { Badge } from "#/components/ui/badge"
+import { Grid, HStack, VStack } from "styled-system/jsx"
+import { BoxScoreTab } from "#/components/game/box-score-tab"
+import { GameLogsTab } from "#/components/game/game-logs-tab"
+import { LineupCard } from "#/components/game/lineup-card"
+import { MatchupRow } from "#/components/game/matchup-row"
 import { Breadcrumb } from "#/components/ui/breadcrumb"
 import { PageContainer } from "#/components/ui/page-container"
+import { SectionBlock } from "#/components/ui/section-block"
+import { Tabs } from "#/components/ui/tabs"
+import { formatUsersName } from "#/components/user/utils"
 
 export const Route = createFileRoute(
 	"/_layout/leagues/$league/$season/game/$gameId/",
@@ -14,21 +22,13 @@ export const Route = createFileRoute(
 	},
 })
 
-const teamColStyles = css({
-	flex: 1,
-	minWidth: "140px",
-})
-
-const teamNameStyles = css({
-	fontFamily: "heading",
-	fontWeight: "800",
-	fontSize: "2xl",
-})
-
 function RouteComponent() {
+	const user = useLoaderData({ from: "/_layout" })
 	const season = useLoaderData({ from: "/_layout/leagues/$league/$season" })
 	const { league } = Route.useParams()
 	const game = Route.useLoaderData()
+	const [tabs, setTabs] = useState<"box-score" | "game-log">("box-score")
+
 	return (
 		<PageContainer>
 			<Breadcrumb>
@@ -83,39 +83,92 @@ function RouteComponent() {
 						{game.week?.weekNumber}
 					</div>
 				)}
+				<MatchupRow league={league} season={season} game={game} />
+			</div>
+			<div
+				className={css({
+					py: "8",
+					borderBottomColor: "border",
+					borderBottomWidth: "1px",
+					borderBottomStyle: "solid",
+				})}
+			>
 				<div
 					className={css({
-						display: "flex",
-						alignItems: "center",
-						justifyContent: "space-between",
-						flexWrap: "wrap",
-						gap: "4",
+						background: "#fff",
+						borderColor: "border",
+						borderWidth: "1px",
+						borderStyle: "solid",
+						borderRadius: "2xl",
+						py: "5",
+						px: "6",
+						width: "100%",
 					})}
 				>
-					<div className={teamColStyles}>
-						<h2 className={teamNameStyles}>
-							<Link
-								to="/leagues/$league/$season/team/$teamId"
-								params={{
-									league,
-									season: season.slug,
-									teamId: game.awayTeamId,
-								}}
-								className={css({
-									color: "ink",
-									_hover: { textDecoration: "underline" },
-								})}
+					<HStack gap="4" justify={"space-between"} flexWrap="wrap">
+						<VStack gap="1" alignItems="flex-start">
+							<div
+								className={css({ fontFamily: "heading", fontWeight: "700" })}
 							>
-								{game.awayTeamName}
-							</Link>
-						</h2>
-						{game.status === "completed" &&
-							game.awayScore != null &&
-							game.homeScore != null &&
-							game.awayScore > game.homeScore && <Badge text="Winner" />}
-					</div>
+								Ref
+							</div>
+							<div className={css({ fontSize: "sm", color: "subtitle" })}>
+								{game.ref ? formatUsersName(game.ref) : "Not yet assigned"}
+							</div>
+						</VStack>
+					</HStack>
 				</div>
 			</div>
+			<SectionBlock
+				heading="Lineups"
+				subtitle="What each captain has submitted for today."
+				bottomBorder
+			>
+				<Grid
+					width="100%"
+					gap="4"
+					gridTemplateColumns={{ base: "1fr", md: "1fr 1fr" }}
+				>
+					<LineupCard
+						teamName={game.awayTeamName}
+						lineup={game.awayLineup}
+						lineupSet={game.awayLineupSet}
+					/>
+					<LineupCard
+						teamName={game.homeTeamName}
+						lineup={game.homeLineup}
+						lineupSet={game.homeLineupSet}
+					/>
+				</Grid>
+			</SectionBlock>
+			<Tabs>
+				<Tabs.StateTab
+					active={tabs === "box-score"}
+					onClick={() => setTabs("box-score")}
+				>
+					Box score
+				</Tabs.StateTab>
+				<Tabs.StateTab
+					active={tabs === "game-log"}
+					onClick={() => setTabs("game-log")}
+				>
+					Game log
+				</Tabs.StateTab>
+			</Tabs>
+			{tabs === "box-score" && (
+				<BoxScoreTab
+					homeTeamName={game.homeTeamName}
+					awayTeamName={game.awayTeamName}
+					homeBoxScore={game.homeBoxScore}
+					awayBoxScore={game.awayBoxScore}
+				/>
+			)}
+			{tabs === "game-log" && (
+				<GameLogsTab
+					halfInnings={game.halfInnings}
+					isGameInProgress={game.status === "in_progress"}
+				/>
+			)}
 		</PageContainer>
 	)
 }

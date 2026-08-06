@@ -4,23 +4,29 @@ type Props = {
 	text: string
 	color?: "teal" | "gold"
 	dot?: boolean
+	bold?: boolean
 	className?: string
 }
 
-export function Badge({ text, color = "teal", dot = false, className }: Props) {
+export function Badge({
+	text,
+	color = "teal",
+	dot = false,
+	bold = true,
+	className,
+}: Props) {
 	return (
 		<span
 			className={cx(
 				css({
 					display: "inline-flex",
-					alignSelf: "flex-start",
 					alignItems: "center",
 					gap: "1.5",
 					fontFamily: "label",
 					fontSize: "xs",
 					textTransform: "uppercase",
 					letterSpacing: "wider",
-					fontWeight: "700",
+					fontWeight: bold ? "700" : "400",
 					py: "1",
 					px: "2",
 					borderRadius: "full",

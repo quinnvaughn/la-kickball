@@ -51,59 +51,392 @@ RETURNS date LANGUAGE sql AS $fn$
 		END);
 $fn$;
 
-CREATE OR REPLACE FUNCTION pg_temp.seed_game_logs(p_game_id uuid, p_roster uuid[])
-RETURNS void LANGUAGE plpgsql AS $fn$
+-- Scratch space for seed_completed_game's per-player tallies while it's
+-- replaying a game — truncated at the start of every call, read back into
+-- game_logs at the end. A temp table (rather than in-memory arrays keyed by
+-- roster position) so accumulation is just "UPDATE ... WHERE user_id = x",
+-- not manual index bookkeeping.
+CREATE TEMP TABLE IF NOT EXISTS tmp_game_stats (
+	user_id uuid PRIMARY KEY,
+	at_bats int NOT NULL DEFAULT 0,
+	runs int NOT NULL DEFAULT 0,
+	rki int NOT NULL DEFAULT 0,
+	singles int NOT NULL DEFAULT 0,
+	doubles int NOT NULL DEFAULT 0,
+	triples int NOT NULL DEFAULT 0,
+	homers int NOT NULL DEFAULT 0,
+	walks int NOT NULL DEFAULT 0,
+	sacs int NOT NULL DEFAULT 0,
+	extra_bases_taken int NOT NULL DEFAULT 0
+);
+
+-- Inserts a completed game (games row + a real inning-by-inning
+-- game_plays log + game_logs tallied from those exact plays) instead of
+-- picking an unconnected random final score and unconnected random box
+-- score stats the way the old seed_game_logs did. The end-of-game rules
+-- below are a deliberate mirror of domain/game-plays.ts replayGame — same
+-- regulation-innings/mercy-rule/walk-off/tie constants, same order of
+-- checks — so that if the app ever replays this seeded data through that
+-- function, it agrees with what's stored here.
+--
+-- Base-running is intentionally the "standard" advance for each hit
+-- (single = runners up one base, double = up two, triple/homer = everyone
+-- scores), with a per-runner chance of taking an extra base beyond that —
+-- mirroring the extra_bases_taken column's own doc comment (1st-to-3rd on
+-- a single, scoring from 2nd on a single, etc). Outs never move a runner
+-- (no double plays) — the only outcomes that touch existing runners are
+-- hits, walks (force only), and sac (runner on 3rd only, otherwise it's
+-- just an out).
+CREATE OR REPLACE FUNCTION pg_temp.seed_completed_game(
+	p_game_id uuid,
+	p_week_id uuid,
+	p_home_team_id uuid,
+	p_away_team_id uuid,
+	p_round game_round,
+	p_field text,
+	p_start_time time,
+	p_ended_at timestamp,
+	p_ref_id uuid,
+	p_home_roster uuid[],
+	p_away_roster uuid[]
+) RETURNS void LANGUAGE plpgsql AS $fn$
 DECLARE
-	uid uuid;
-	ab int;
-	hit_singles int;
-	hit_doubles int;
-	hit_triples int;
-	hit_homers int;
-	hit_walks int;
-	hit_sacs int;
-	hit_runs int;
-	hit_rki int;
-	hit_xbt int;
-	k int;
-	r float;
+	v_home_size int := array_length(p_home_roster, 1);
+	v_away_size int := array_length(p_away_roster, 1);
+	v_home_idx int := 1;
+	v_away_idx int := 1;
+	v_inning int := 1;
+	v_half smallint := 0; -- 0 = top (away batting), 1 = bottom (home batting)
+	v_outs int := 0;
+	v_runs_this_half int := 0;
+	v_home_score int := 0;
+	v_away_score int := 0;
+	v_seq int := 1;
+	v_batter uuid;
+	v_outcome text;
+	v_roll float;
+	v_b1 uuid; v_b2 uuid; v_b3 uuid;
+	v_n1 uuid; v_n2 uuid; v_n3 uuid;
+	v_bases uuid[] := ARRAY[NULL, NULL, NULL]::uuid[];
+	v_runner_events jsonb;
+	v_runs_on_play int;
+	v_batter_scored boolean;
+	v_outs_on_play int;
 BEGIN
-	FOREACH uid IN ARRAY p_roster LOOP
-		ab := 2 + floor(random() * 3)::int; -- 2..4
-		hit_singles := 0;
-		hit_doubles := 0;
-		hit_triples := 0;
-		hit_homers := 0;
+	INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, ref_id)
+	VALUES (p_game_id, p_week_id, p_home_team_id, p_away_team_id, p_round, p_field, p_start_time, p_ref_id);
 
-		FOR k IN 1..ab LOOP
-			r := random();
-			IF r < 0.45 THEN
-				NULL; -- out
-			ELSIF r < 0.70 THEN
-				hit_singles := hit_singles + 1;
-			ELSIF r < 0.85 THEN
-				hit_doubles := hit_doubles + 1;
-			ELSIF r < 0.90 THEN
-				hit_triples := hit_triples + 1;
-			ELSIF r < 0.97 THEN
-				hit_homers := hit_homers + 1;
+	TRUNCATE tmp_game_stats;
+	INSERT INTO tmp_game_stats (user_id)
+	SELECT DISTINCT uid FROM unnest(p_home_roster || p_away_roster) AS uid;
+
+	LOOP
+		-- Safety valve for a pathological string of extra-inning ties in
+		-- playoff rounds — practically never hit, since each extra half
+		-- inning has many chances to break a tie.
+		EXIT WHEN v_inning > 20;
+
+		IF v_half = 0 THEN
+			v_batter := p_away_roster[((v_away_idx - 1) % v_away_size) + 1];
+			v_away_idx := v_away_idx + 1;
+		ELSE
+			v_batter := p_home_roster[((v_home_idx - 1) % v_home_size) + 1];
+			v_home_idx := v_home_idx + 1;
+		END IF;
+
+		v_b1 := v_bases[1]; v_b2 := v_bases[2]; v_b3 := v_bases[3];
+		v_n1 := NULL; v_n2 := NULL; v_n3 := NULL;
+		v_runner_events := '[]'::jsonb;
+		v_runs_on_play := 0;
+		v_batter_scored := false;
+		v_outs_on_play := 0;
+
+		v_roll := random();
+		IF v_roll < 0.09 THEN
+			v_outcome := 'walk';
+		ELSIF v_roll < 0.64 THEN
+			v_outcome := 'out';
+		ELSIF v_roll < 0.84 THEN
+			v_outcome := 'single';
+		ELSIF v_roll < 0.95 THEN
+			v_outcome := 'double';
+		ELSIF v_roll < 0.98 THEN
+			v_outcome := 'triple';
+		ELSE
+			v_outcome := 'homer';
+		END IF;
+
+		-- Sac fly: only makes sense with a runner on 3rd and fewer than 2
+		-- outs (need the sac to bring someone home).
+		IF v_outcome = 'out' AND v_b3 IS NOT NULL AND v_outs < 2 AND random() < 0.25 THEN
+			v_outcome := 'sac';
+		END IF;
+
+		-- Every runner who started this play on base gets exactly one entry
+		-- below — scored, out, held (toBase = fromBase), or advanced
+		-- (toBase = wherever they ended up) — so a consumer can reconstruct
+		-- the exact bases-occupied state after any play without having to
+		-- infer "no entry means they didn't move" (they might have moved to
+		-- a base that just isn't communicated).
+		IF v_outcome = 'walk' THEN
+			-- Force advances only — runners not directly forced hold.
+			IF v_b1 IS NOT NULL THEN
+				IF v_b2 IS NOT NULL THEN
+					IF v_b3 IS NOT NULL THEN
+						v_runner_events := v_runner_events || jsonb_build_array(
+							jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'scored'));
+						v_runs_on_play := v_runs_on_play + 1;
+					END IF;
+					v_n3 := v_b2;
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'advanced', 'toBase', 3));
+				ELSE
+					v_n3 := v_b3;
+					IF v_b3 IS NOT NULL THEN
+						v_runner_events := v_runner_events || jsonb_build_array(
+							jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'held', 'toBase', 3));
+					END IF;
+				END IF;
+				v_n2 := v_b1;
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'advanced', 'toBase', 2));
+			ELSE
+				v_n2 := v_b2;
+				v_n3 := v_b3;
+				IF v_b2 IS NOT NULL THEN
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'held', 'toBase', 2));
+				END IF;
+				IF v_b3 IS NOT NULL THEN
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'held', 'toBase', 3));
+				END IF;
 			END IF;
-		END LOOP;
+			v_n1 := v_batter;
+			UPDATE tmp_game_stats SET walks = walks + 1 WHERE user_id = v_batter;
 
-		hit_walks := floor(random() * 2)::int; -- 0..1
-		hit_sacs := CASE WHEN random() < 0.15 THEN 1 ELSE 0 END;
-		hit_runs := floor(random() * 3)::int; -- 0..2
-		hit_rki := floor(random() * 4)::int; -- 0..3
-		hit_xbt := floor(random() * 3)::int; -- 0..2
+		ELSIF v_outcome = 'single' THEN
+			IF v_b3 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			IF v_b2 IS NOT NULL THEN
+				IF random() < 0.65 THEN
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'scored'));
+					v_runs_on_play := v_runs_on_play + 1;
+					UPDATE tmp_game_stats SET extra_bases_taken = extra_bases_taken + 1 WHERE user_id = v_b2;
+				ELSE
+					v_n3 := v_b2;
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'advanced', 'toBase', 3));
+				END IF;
+			END IF;
+			IF v_b1 IS NOT NULL THEN
+				v_roll := random();
+				IF v_roll < 0.05 THEN
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'scored'));
+					v_runs_on_play := v_runs_on_play + 1;
+					UPDATE tmp_game_stats SET extra_bases_taken = extra_bases_taken + 2 WHERE user_id = v_b1;
+				ELSIF v_roll < 0.25 AND v_n3 IS NULL THEN
+					v_n3 := v_b1;
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'advanced', 'toBase', 3));
+					UPDATE tmp_game_stats SET extra_bases_taken = extra_bases_taken + 1 WHERE user_id = v_b1;
+				ELSE
+					v_n2 := v_b1;
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'advanced', 'toBase', 2));
+				END IF;
+			END IF;
+			v_n1 := v_batter;
+			UPDATE tmp_game_stats SET at_bats = at_bats + 1, singles = singles + 1 WHERE user_id = v_batter;
 
-		INSERT INTO game_logs (
-			id, game_id, user_id, at_bats, runs, rki,
-			singles, doubles, triples, homers, walks, sacs, extra_bases_taken
-		) VALUES (
-			gen_random_uuid(), p_game_id, uid, ab, hit_runs, hit_rki,
-			hit_singles, hit_doubles, hit_triples, hit_homers, hit_walks, hit_sacs, hit_xbt
-		);
+		ELSIF v_outcome = 'double' THEN
+			IF v_b3 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			IF v_b2 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			IF v_b1 IS NOT NULL THEN
+				IF random() < 0.40 THEN
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'scored'));
+					v_runs_on_play := v_runs_on_play + 1;
+					UPDATE tmp_game_stats SET extra_bases_taken = extra_bases_taken + 1 WHERE user_id = v_b1;
+				ELSE
+					v_n3 := v_b1;
+					v_runner_events := v_runner_events || jsonb_build_array(
+						jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'advanced', 'toBase', 3));
+				END IF;
+			END IF;
+			v_n2 := v_batter;
+			UPDATE tmp_game_stats SET at_bats = at_bats + 1, doubles = doubles + 1 WHERE user_id = v_batter;
+
+		ELSIF v_outcome = 'triple' THEN
+			IF v_b3 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			IF v_b2 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			IF v_b1 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			v_n3 := v_batter;
+			UPDATE tmp_game_stats SET at_bats = at_bats + 1, triples = triples + 1 WHERE user_id = v_batter;
+
+		ELSIF v_outcome = 'homer' THEN
+			IF v_b3 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			IF v_b2 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			IF v_b1 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'scored'));
+				v_runs_on_play := v_runs_on_play + 1;
+			END IF;
+			v_batter_scored := true;
+			UPDATE tmp_game_stats SET at_bats = at_bats + 1, homers = homers + 1 WHERE user_id = v_batter;
+
+		ELSIF v_outcome = 'sac' THEN
+			v_runner_events := v_runner_events || jsonb_build_array(
+				jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'scored'));
+			v_runs_on_play := v_runs_on_play + 1;
+			v_n1 := v_b1;
+			v_n2 := v_b2;
+			IF v_b1 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'held', 'toBase', 1));
+			END IF;
+			IF v_b2 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'held', 'toBase', 2));
+			END IF;
+			v_outs_on_play := 1;
+			UPDATE tmp_game_stats SET sacs = sacs + 1 WHERE user_id = v_batter;
+
+		ELSE -- 'out'
+			v_n1 := v_b1; v_n2 := v_b2; v_n3 := v_b3;
+			IF v_b1 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b1, 'fromBase', 1, 'result', 'held', 'toBase', 1));
+			END IF;
+			IF v_b2 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b2, 'fromBase', 2, 'result', 'held', 'toBase', 2));
+			END IF;
+			IF v_b3 IS NOT NULL THEN
+				v_runner_events := v_runner_events || jsonb_build_array(
+					jsonb_build_object('runnerId', v_b3, 'fromBase', 3, 'result', 'held', 'toBase', 3));
+			END IF;
+			v_outs_on_play := 1;
+			UPDATE tmp_game_stats SET at_bats = at_bats + 1 WHERE user_id = v_batter;
+		END IF;
+
+		UPDATE tmp_game_stats SET runs = runs + 1
+			WHERE user_id IN (
+				SELECT (e ->> 'runnerId')::uuid FROM jsonb_array_elements(v_runner_events) e
+				WHERE e ->> 'result' = 'scored'
+			);
+		UPDATE tmp_game_stats
+			SET rki = rki + v_runs_on_play + (CASE WHEN v_batter_scored THEN 1 ELSE 0 END)
+			WHERE user_id = v_batter;
+		IF v_batter_scored THEN
+			UPDATE tmp_game_stats SET runs = runs + 1 WHERE user_id = v_batter;
+		END IF;
+
+		v_bases := ARRAY[v_n1, v_n2, v_n3];
+
+		INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
+		VALUES (gen_random_uuid(), p_game_id, v_seq, v_batter, v_outcome::play_outcome, v_half, v_inning, v_runner_events);
+		v_seq := v_seq + 1;
+
+		v_outs := v_outs + v_outs_on_play;
+		v_runs_on_play := v_runs_on_play + (CASE WHEN v_batter_scored THEN 1 ELSE 0 END);
+		v_runs_this_half := v_runs_this_half + v_runs_on_play;
+		IF v_half = 0 THEN
+			v_away_score := v_away_score + v_runs_on_play;
+		ELSE
+			v_home_score := v_home_score + v_runs_on_play;
+		END IF;
+
+		-- Mid-at-bat end conditions: mercy rule while the home team is
+		-- batting, and a bottom-of-7th-or-later walk-off, both checked the
+		-- instant the score crosses the line rather than waiting for 3 outs.
+		IF v_half = 1 AND v_inning >= 4 AND v_home_score - v_away_score >= 15 THEN
+			EXIT;
+		END IF;
+		IF v_half = 1 AND v_inning >= 7 AND v_home_score > v_away_score THEN
+			EXIT;
+		END IF;
+
+		IF v_outs < 3 AND v_runs_this_half < 10 THEN
+			CONTINUE;
+		END IF;
+
+		IF v_half = 0 THEN
+			-- Top half just ended — skip the bottom half if home is
+			-- already ahead walking in and it's the last inning.
+			IF v_inning >= 7 AND v_home_score > v_away_score THEN
+				EXIT;
+			END IF;
+			v_half := 1;
+			v_outs := 0;
+			v_runs_this_half := 0;
+			v_bases := ARRAY[NULL, NULL, NULL]::uuid[];
+			CONTINUE;
+		END IF;
+
+		-- Bottom half just ended — the inning is fully complete.
+		IF v_inning >= 4 AND v_away_score - v_home_score >= 15 THEN
+			EXIT;
+		END IF;
+		IF v_inning >= 7 THEN
+			-- Not tied, or a regular-season game (which ends in a tie
+			-- rather than playing extra innings): over. Otherwise
+			-- (playoffs, still tied) fall through into extra innings.
+			IF v_home_score <> v_away_score OR p_round = 'regular' THEN
+				EXIT;
+			END IF;
+		END IF;
+
+		v_inning := v_inning + 1;
+		v_half := 0;
+		v_outs := 0;
+		v_runs_this_half := 0;
+		v_bases := ARRAY[NULL, NULL, NULL]::uuid[];
 	END LOOP;
+
+	INSERT INTO game_logs (
+		id, game_id, user_id, at_bats, runs, rki,
+		singles, doubles, triples, homers, walks, sacs, extra_bases_taken
+	)
+	SELECT gen_random_uuid(), p_game_id, user_id, at_bats, runs, rki,
+		singles, doubles, triples, homers, walks, sacs, extra_bases_taken
+	FROM tmp_game_stats;
+
+	UPDATE games SET home_score = v_home_score, away_score = v_away_score, ended_at = p_ended_at
+	WHERE id = p_game_id;
 END;
 $fn$;
 
@@ -213,6 +546,15 @@ BEGIN
 		team_ids := array_append(team_ids, team_id);
 	END LOOP;
 
+	-- Register this season's ref pool in season_referees — assigning a
+	-- game's ref_id validates against season_referees for that game's
+	-- season (see games.ts), so a ref used below without a row here
+	-- would be a ref the app itself could never have assigned.
+	FOR g IN 1..array_length(p_ref_pool, 1) LOOP
+		INSERT INTO season_referees (id, season_id, user_id)
+		VALUES (gen_random_uuid(), p_season_id, p_ref_pool[g]);
+	END LOOP;
+
 	-- One shuffle of the pool, sliced roster_size-at-a-time per team —
 	-- no player is double-booked onto two teams in the same season.
 	shuffled_players := ARRAY(SELECT unnest(p_player_pool) ORDER BY random());
@@ -298,28 +640,10 @@ BEGIN
 					INSERT INTO game_plays (id, game_id, sequence, batter_id, outcome, half, inning, runner_events)
 					VALUES (gen_random_uuid(), game_id, 5, away_roster[3], 'out', 0, 2, '[]');
 				ELSE
-					LOOP
-						home_score := 3 + floor(random() * 13)::int;
-						away_score := 3 + floor(random() * 13)::int;
-						EXIT WHEN home_score <> away_score;
-					END LOOP;
-
-					INSERT INTO games (
-						id, week_id, home_team_id, away_team_id, round, field,
-						start_time, home_score, away_score, ended_at, ref_id
-					) VALUES (
-						game_id, week_id, home_team, away_team, 'regular',
-						'Field ' || g,
-						v_season.start_time, home_score, away_score,
-						(week_date + v_season.start_time) + interval '2 hours', ref_id
-					);
-
-					PERFORM pg_temp.seed_game_logs(
-						game_id,
-						shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)]
-					);
-					PERFORM pg_temp.seed_game_logs(
-						game_id,
+					PERFORM pg_temp.seed_completed_game(
+						game_id, week_id, home_team, away_team, 'regular', 'Field ' || g,
+						v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+						shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)],
 						shuffled_players[((away_idx - 1) * p_roster_size + 1):(away_idx * p_roster_size)]
 					);
 				END IF;
@@ -345,33 +669,16 @@ BEGIN
 				'Field 1', v_season.start_time, ref_id
 			);
 
-			-- Game 2: completed — final score, box score stats, ended_at set.
+			-- Game 2: completed — final score, play-by-play + box score, ended_at set.
 			home_idx := active_pairing_sets[set_idx][3];
 			away_idx := active_pairing_sets[set_idx][4];
 			ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
 
-			LOOP
-				home_score := 3 + floor(random() * 13)::int;
-				away_score := 3 + floor(random() * 13)::int;
-				EXIT WHEN home_score <> away_score;
-			END LOOP;
-
 			game_id := gen_random_uuid();
-			INSERT INTO games (
-				id, week_id, home_team_id, away_team_id, round, field,
-				start_time, home_score, away_score, ended_at, ref_id
-			) VALUES (
-				game_id, week_id, team_ids[home_idx], team_ids[away_idx], 'regular',
-				'Field 2', v_season.start_time, home_score, away_score,
-				(week_date + v_season.start_time) + interval '2 hours', ref_id
-			);
-
-			PERFORM pg_temp.seed_game_logs(
-				game_id,
-				shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)]
-			);
-			PERFORM pg_temp.seed_game_logs(
-				game_id,
+			PERFORM pg_temp.seed_completed_game(
+				game_id, week_id, team_ids[home_idx], team_ids[away_idx], 'regular', 'Field 2',
+				v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+				shuffled_players[((home_idx - 1) * p_roster_size + 1):(home_idx * p_roster_size)],
 				shuffled_players[((away_idx - 1) * p_roster_size + 1):(away_idx * p_roster_size)]
 			);
 
@@ -479,63 +786,55 @@ BEGIN
 
 		-- QF1: teams[1] v teams[8]
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
-		LOOP
-			home_score := 3 + floor(random() * 13)::int;
-			away_score := 3 + floor(random() * 13)::int;
-			EXIT WHEN home_score <> away_score;
-		END LOOP;
 		qf1_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
-		VALUES (qf1_id, week_id, team_ids[1], team_ids[8], 'quarterfinal', 'Field 1', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		PERFORM pg_temp.seed_completed_game(
+			qf1_id, week_id, team_ids[1], team_ids[8], 'quarterfinal', 'Field 1',
+			v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+			shuffled_players[1:p_roster_size],
+			shuffled_players[(7 * p_roster_size + 1):(8 * p_roster_size)]
+		);
+		SELECT games.home_score, games.away_score INTO home_score, away_score FROM games WHERE id = qf1_id;
 		qf1_winner_idx := CASE WHEN home_score > away_score THEN 1 ELSE 8 END;
 		qf1_winner := team_ids[qf1_winner_idx];
-		PERFORM pg_temp.seed_game_logs(qf1_id, shuffled_players[1:p_roster_size]);
-		PERFORM pg_temp.seed_game_logs(qf1_id, shuffled_players[(7 * p_roster_size + 1):(8 * p_roster_size)]);
 
 		-- QF2: teams[2] v teams[7]
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
-		LOOP
-			home_score := 3 + floor(random() * 13)::int;
-			away_score := 3 + floor(random() * 13)::int;
-			EXIT WHEN home_score <> away_score;
-		END LOOP;
 		qf2_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
-		VALUES (qf2_id, week_id, team_ids[2], team_ids[7], 'quarterfinal', 'Field 2', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		PERFORM pg_temp.seed_completed_game(
+			qf2_id, week_id, team_ids[2], team_ids[7], 'quarterfinal', 'Field 2',
+			v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+			shuffled_players[(p_roster_size + 1):(2 * p_roster_size)],
+			shuffled_players[(6 * p_roster_size + 1):(7 * p_roster_size)]
+		);
+		SELECT games.home_score, games.away_score INTO home_score, away_score FROM games WHERE id = qf2_id;
 		qf2_winner_idx := CASE WHEN home_score > away_score THEN 2 ELSE 7 END;
 		qf2_winner := team_ids[qf2_winner_idx];
-		PERFORM pg_temp.seed_game_logs(qf2_id, shuffled_players[(p_roster_size + 1):(2 * p_roster_size)]);
-		PERFORM pg_temp.seed_game_logs(qf2_id, shuffled_players[(6 * p_roster_size + 1):(7 * p_roster_size)]);
 
 		-- QF3: teams[3] v teams[6]
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
-		LOOP
-			home_score := 3 + floor(random() * 13)::int;
-			away_score := 3 + floor(random() * 13)::int;
-			EXIT WHEN home_score <> away_score;
-		END LOOP;
 		qf3_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
-		VALUES (qf3_id, week_id, team_ids[3], team_ids[6], 'quarterfinal', 'Field 3', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		PERFORM pg_temp.seed_completed_game(
+			qf3_id, week_id, team_ids[3], team_ids[6], 'quarterfinal', 'Field 3',
+			v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+			shuffled_players[(2 * p_roster_size + 1):(3 * p_roster_size)],
+			shuffled_players[(5 * p_roster_size + 1):(6 * p_roster_size)]
+		);
+		SELECT games.home_score, games.away_score INTO home_score, away_score FROM games WHERE id = qf3_id;
 		qf3_winner_idx := CASE WHEN home_score > away_score THEN 3 ELSE 6 END;
 		qf3_winner := team_ids[qf3_winner_idx];
-		PERFORM pg_temp.seed_game_logs(qf3_id, shuffled_players[(2 * p_roster_size + 1):(3 * p_roster_size)]);
-		PERFORM pg_temp.seed_game_logs(qf3_id, shuffled_players[(5 * p_roster_size + 1):(6 * p_roster_size)]);
 
 		-- QF4: teams[4] v teams[5]
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
-		LOOP
-			home_score := 3 + floor(random() * 13)::int;
-			away_score := 3 + floor(random() * 13)::int;
-			EXIT WHEN home_score <> away_score;
-		END LOOP;
 		qf4_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
-		VALUES (qf4_id, week_id, team_ids[4], team_ids[5], 'quarterfinal', 'Field 4', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		PERFORM pg_temp.seed_completed_game(
+			qf4_id, week_id, team_ids[4], team_ids[5], 'quarterfinal', 'Field 4',
+			v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+			shuffled_players[(3 * p_roster_size + 1):(4 * p_roster_size)],
+			shuffled_players[(4 * p_roster_size + 1):(5 * p_roster_size)]
+		);
+		SELECT games.home_score, games.away_score INTO home_score, away_score FROM games WHERE id = qf4_id;
 		qf4_winner_idx := CASE WHEN home_score > away_score THEN 4 ELSE 5 END;
 		qf4_winner := team_ids[qf4_winner_idx];
-		PERFORM pg_temp.seed_game_logs(qf4_id, shuffled_players[(3 * p_roster_size + 1):(4 * p_roster_size)]);
-		PERFORM pg_temp.seed_game_logs(qf4_id, shuffled_players[(4 * p_roster_size + 1):(5 * p_roster_size)]);
 
 		-- Semifinals: matchups are set from the QF winners, but nobody's
 		-- played yet — this is the "just past quarterfinals" state.
@@ -566,32 +865,28 @@ BEGIN
 		VALUES (week_id, p_season_id, p_total_weeks + 1, week_date);
 
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
-		LOOP
-			home_score := 3 + floor(random() * 13)::int;
-			away_score := 3 + floor(random() * 13)::int;
-			EXIT WHEN home_score <> away_score;
-		END LOOP;
 		semi1_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
-		VALUES (semi1_id, week_id, team_ids[1], team_ids[2], 'semifinal', 'Field 1', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		PERFORM pg_temp.seed_completed_game(
+			semi1_id, week_id, team_ids[1], team_ids[2], 'semifinal', 'Field 1',
+			v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+			shuffled_players[1:p_roster_size],
+			shuffled_players[(p_roster_size + 1):(2 * p_roster_size)]
+		);
+		SELECT games.home_score, games.away_score INTO home_score, away_score FROM games WHERE id = semi1_id;
 		semi1_winner_idx := CASE WHEN home_score > away_score THEN 1 ELSE 2 END;
 		semi1_winner := team_ids[semi1_winner_idx];
-		PERFORM pg_temp.seed_game_logs(semi1_id, shuffled_players[1:p_roster_size]);
-		PERFORM pg_temp.seed_game_logs(semi1_id, shuffled_players[(p_roster_size + 1):(2 * p_roster_size)]);
 
 		ref_id := p_ref_pool[1 + floor(random() * array_length(p_ref_pool, 1))::int];
-		LOOP
-			home_score := 3 + floor(random() * 13)::int;
-			away_score := 3 + floor(random() * 13)::int;
-			EXIT WHEN home_score <> away_score;
-		END LOOP;
 		semi2_id := gen_random_uuid();
-		INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
-		VALUES (semi2_id, week_id, team_ids[3], team_ids[4], 'semifinal', 'Field 2', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
+		PERFORM pg_temp.seed_completed_game(
+			semi2_id, week_id, team_ids[3], team_ids[4], 'semifinal', 'Field 2',
+			v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+			shuffled_players[(2 * p_roster_size + 1):(3 * p_roster_size)],
+			shuffled_players[(3 * p_roster_size + 1):(4 * p_roster_size)]
+		);
+		SELECT games.home_score, games.away_score INTO home_score, away_score FROM games WHERE id = semi2_id;
 		semi2_winner_idx := CASE WHEN home_score > away_score THEN 3 ELSE 4 END;
 		semi2_winner := team_ids[semi2_winner_idx];
-		PERFORM pg_temp.seed_game_logs(semi2_id, shuffled_players[(2 * p_roster_size + 1):(3 * p_roster_size)]);
-		PERFORM pg_temp.seed_game_logs(semi2_id, shuffled_players[(3 * p_roster_size + 1):(4 * p_roster_size)]);
 
 		-- Final: matchup is set from the semifinal winners. If the final
 		-- hasn't been played yet, nobody's entered a score — this is the
@@ -605,24 +900,15 @@ BEGIN
 		final_id := gen_random_uuid();
 
 		IF p_final_played THEN
-			LOOP
-				home_score := 3 + floor(random() * 13)::int;
-				away_score := 3 + floor(random() * 13)::int;
-				EXIT WHEN home_score <> away_score;
-			END LOOP;
-
-			INSERT INTO games (id, week_id, home_team_id, away_team_id, round, field, start_time, home_score, away_score, ended_at, ref_id)
-			VALUES (final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1', v_season.start_time, home_score, away_score, (week_date + v_season.start_time) + interval '2 hours', ref_id);
-
-			final_winner := CASE WHEN home_score > away_score THEN semi1_winner ELSE semi2_winner END;
-			PERFORM pg_temp.seed_game_logs(
-				final_id,
-				shuffled_players[((semi1_winner_idx - 1) * p_roster_size + 1):(semi1_winner_idx * p_roster_size)]
-			);
-			PERFORM pg_temp.seed_game_logs(
-				final_id,
+			PERFORM pg_temp.seed_completed_game(
+				final_id, week_id, semi1_winner, semi2_winner, 'final', 'Field 1',
+				v_season.start_time, (week_date + v_season.start_time) + interval '2 hours', ref_id,
+				shuffled_players[((semi1_winner_idx - 1) * p_roster_size + 1):(semi1_winner_idx * p_roster_size)],
 				shuffled_players[((semi2_winner_idx - 1) * p_roster_size + 1):(semi2_winner_idx * p_roster_size)]
 			);
+			SELECT games.home_score, games.away_score INTO home_score, away_score FROM games WHERE id = final_id;
+
+			final_winner := CASE WHEN home_score > away_score THEN semi1_winner ELSE semi2_winner END;
 
 			UPDATE seasons SET winner_id = final_winner WHERE id = p_season_id;
 
@@ -665,6 +951,18 @@ DECLARE
 	-- season's own day_of_week (set below, per season) via week_anchor, so
 	-- games land on the weekday they're supposed to instead of whatever
 	-- weekday a raw "N days ago" offset happened to fall on.
+	--
+	-- Because these six offsets are fixed distances from "today," several
+	-- pairs are close enough together (well under a quarter's ~91-day span)
+	-- that they land in the same quarter+year on many days of the year —
+	-- and some of those pairs share a division, which used to make their
+	-- quarter-year-division slugs collide on the seasons table's
+	-- (league_id, slug) unique constraint. Splitting the six into just two
+	-- divisions can't fix this in general (playoffs/quarterfinals/active
+	-- are mutually close enough to need 3+ colors), so each slug below
+	-- gets an explicit per-stage suffix (-future, -soon, -active,
+	-- -quarterfinals, -playoffs, -completed) instead of relying on
+	-- quarter+division for uniqueness.
 	v_today date := (now() AT TIME ZONE 'America/Los_Angeles')::date;
 	v_future_start date := pg_temp.week_anchor(v_today + 75, 'sunday'); -- registration open, well out
 	v_soon_start date := pg_temp.week_anchor(v_today + 9, 'wednesday'); -- registration open, starts within 2 weeks
@@ -735,7 +1033,7 @@ BEGIN
 		pg_temp.season_quarter_label(v_future_start),
 		EXTRACT(YEAR FROM v_future_start)::smallint,
 		'mens',
-		pg_temp.season_quarter_label(v_future_start) || '-' || EXTRACT(YEAR FROM v_future_start)::int || '-mens',
+		pg_temp.season_quarter_label(v_future_start) || '-' || EXTRACT(YEAR FROM v_future_start)::int || '-mens-future',
 		v_league_id,
 		'sunday',
 		'13:00',
@@ -751,7 +1049,7 @@ BEGIN
 		pg_temp.season_quarter_label(v_soon_start),
 		EXTRACT(YEAR FROM v_soon_start)::smallint,
 		'mens',
-		pg_temp.season_quarter_label(v_soon_start) || '-' || EXTRACT(YEAR FROM v_soon_start)::int || '-mens',
+		pg_temp.season_quarter_label(v_soon_start) || '-' || EXTRACT(YEAR FROM v_soon_start)::int || '-mens-soon',
 		v_league_id,
 		'wednesday',
 		'18:30',
@@ -767,7 +1065,7 @@ BEGIN
 		pg_temp.season_quarter_label(v_active_start),
 		EXTRACT(YEAR FROM v_active_start)::smallint,
 		'coed',
-		pg_temp.season_quarter_label(v_active_start) || '-' || EXTRACT(YEAR FROM v_active_start)::int || '-coed',
+		pg_temp.season_quarter_label(v_active_start) || '-' || EXTRACT(YEAR FROM v_active_start)::int || '-coed-active',
 		v_league_id,
 		'saturday',
 		'10:00',
@@ -777,20 +1075,18 @@ BEGIN
 	)
 	RETURNING id INTO v_active_id;
 
-	-- 'mens', not 'coed': v_quarterfinals_start lands in the same quarter
-	-- as v_playoffs_start (both need a similar "next round is imminent"
-	-- offset from today), so matching the playoffs season's 'coed'
-	-- division here would collide on the (league_id, slug) unique
-	-- constraint. Mens also means this season's regular-season MVPs
-	-- exercise the single-winner path instead of duplicating coed's
-	-- guy/girl split, which active/playoffs already cover.
+	-- 'mens': this season's regular-season MVPs exercise the single-winner
+	-- path instead of duplicating coed's guy/girl split, which
+	-- active/playoffs already cover. (The slug's '-quarterfinals' suffix
+	-- below, not the division, is what keeps this from colliding with the
+	-- other seasons on (league_id, slug) — see the note above v_today.)
 	INSERT INTO seasons (id, season, year, division, slug, league_id, day_of_week, start_time, end_time, start_date, weeks)
 	VALUES (
 		gen_random_uuid(),
 		pg_temp.season_quarter_label(v_quarterfinals_start),
 		EXTRACT(YEAR FROM v_quarterfinals_start)::smallint,
 		'mens',
-		pg_temp.season_quarter_label(v_quarterfinals_start) || '-' || EXTRACT(YEAR FROM v_quarterfinals_start)::int || '-mens',
+		pg_temp.season_quarter_label(v_quarterfinals_start) || '-' || EXTRACT(YEAR FROM v_quarterfinals_start)::int || '-mens-quarterfinals',
 		v_league_id,
 		'tuesday',
 		'19:00',
@@ -806,7 +1102,7 @@ BEGIN
 		pg_temp.season_quarter_label(v_playoffs_start),
 		EXTRACT(YEAR FROM v_playoffs_start)::smallint,
 		'coed',
-		pg_temp.season_quarter_label(v_playoffs_start) || '-' || EXTRACT(YEAR FROM v_playoffs_start)::int || '-coed',
+		pg_temp.season_quarter_label(v_playoffs_start) || '-' || EXTRACT(YEAR FROM v_playoffs_start)::int || '-coed-playoffs',
 		v_league_id,
 		'saturday',
 		'10:00',
@@ -822,7 +1118,7 @@ BEGIN
 		pg_temp.season_quarter_label(v_completed_start),
 		EXTRACT(YEAR FROM v_completed_start)::smallint,
 		'mens',
-		pg_temp.season_quarter_label(v_completed_start) || '-' || EXTRACT(YEAR FROM v_completed_start)::int || '-mens',
+		pg_temp.season_quarter_label(v_completed_start) || '-' || EXTRACT(YEAR FROM v_completed_start)::int || '-mens-completed',
 		v_league_id,
 		'sunday',
 		'13:00',
@@ -837,7 +1133,7 @@ BEGIN
 	-- can't log in through the app.
 	FOR i IN 1..62 LOOP
 		new_user_id := gen_random_uuid();
-		INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin, is_ref)
+		INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin)
 		VALUES (
 			new_user_id,
 			first_names[1 + floor(random() * array_length(first_names, 1))::int],
@@ -845,8 +1141,7 @@ BEGIN
 			'fake-player-' || i || '@example.com',
 			'555' || lpad(i::text, 7, '0'),
 			'seed-data-not-a-real-hash',
-			false,
-			i <= 6
+			false
 		);
 		IF i <= 6 THEN
 			ref_pool := array_append(ref_pool, new_user_id);
@@ -887,7 +1182,7 @@ BEGIN
 	-- Gives the free-agent/weekly-sub cards a real "new player, no games
 	-- logged" case instead of every row having career stats.
 	new_free_agent_1 := gen_random_uuid();
-	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin, is_ref)
+	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin)
 	VALUES (
 		new_free_agent_1,
 		first_names[1 + floor(random() * array_length(first_names, 1))::int],
@@ -895,11 +1190,10 @@ BEGIN
 		'fake-player-newfa1@example.com',
 		'5559990001',
 		'seed-data-not-a-real-hash',
-		false,
 		false
 	);
 	new_free_agent_2 := gen_random_uuid();
-	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin, is_ref)
+	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin)
 	VALUES (
 		new_free_agent_2,
 		first_names[1 + floor(random() * array_length(first_names, 1))::int],
@@ -907,7 +1201,6 @@ BEGIN
 		'fake-player-newfa2@example.com',
 		'5559990002',
 		'seed-data-not-a-real-hash',
-		false,
 		false
 	);
 
@@ -932,7 +1225,7 @@ BEGIN
 	SELECT id INTO soon_captain_team FROM teams WHERE season_id = v_soon_id ORDER BY name LIMIT 1;
 
 	real_captain_id := gen_random_uuid();
-	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin, is_ref)
+	INSERT INTO users (id, first_name, last_name, email, phone, password_hash, is_admin)
 	VALUES (
 		real_captain_id,
 		'Test',
@@ -940,7 +1233,6 @@ BEGIN
 		'fake-captain@example.com',
 		'5559990003',
 		'$argon2id$v=19$m=65536,p=4,t=3$DK/9jSdx18HcKXZ09uCxCA$caqcsSXOvBkL7aW4ph4ti1c0eyYQlM+PiVAaPmxXzTA',
-		false,
 		false
 	);
 

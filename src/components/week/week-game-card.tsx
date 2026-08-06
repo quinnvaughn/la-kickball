@@ -3,6 +3,7 @@ import { DateTime } from "luxon"
 import { css, cx } from "styled-system/css"
 import { match, P } from "ts-pattern"
 import type { ScheduleGame } from "#/server/domain/schedule"
+import { formatHalfInning } from "../game/format-half-inning"
 import { Badge } from "../ui/badge"
 
 type Props = {
@@ -10,25 +11,6 @@ type Props = {
 	league: { location: string; slug: string }
 	season: string
 	captainTeamId: string | null
-}
-
-const ordinalRules = new Intl.PluralRules("en-US", { type: "ordinal" })
-const ordinalSuffixes: Record<Intl.LDMLPluralRule, string> = {
-	one: "st",
-	two: "nd",
-	few: "rd",
-	other: "th",
-	zero: "th",
-	many: "th",
-}
-
-function formatInning(inning: number) {
-	return `${inning}${ordinalSuffixes[ordinalRules.select(inning)]}`
-}
-
-function formatHalfInning(game: ScheduleGame) {
-	if (game.half === null || game.inning === null) return null
-	return `${game.half === 0 ? "Top" : "Bottom"} ${formatInning(game.inning)}`
 }
 
 const gameRowStyles = css({
@@ -120,13 +102,23 @@ export function WeekGameCard({ game, league, season, captainTeamId }: Props) {
 					text={
 						formatHalfInning(game) ? `Live · ${formatHalfInning(game)}` : "Live"
 					}
+					className={css({ alignSelf: "flex-start" })}
 					dot
 				/>
 			)}
 			{game.status === "suspended" && (
-				<Badge text={`Suspended · ${formatHalfInning(game)}`} />
+				<Badge
+					text={`Suspended · ${formatHalfInning(game)}`}
+					className={css({ alignSelf: "flex-start" })}
+				/>
 			)}
-			{myLineupIsUnset && <Badge color="gold" text="Lineup not yet set" />}
+			{myLineupIsUnset && (
+				<Badge
+					color="gold"
+					text="Lineup not yet set"
+					className={css({ alignSelf: "flex-start" })}
+				/>
+			)}
 			<div
 				className={cx(
 					gameRowStyles,

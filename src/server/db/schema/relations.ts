@@ -6,6 +6,7 @@ import { games } from "./games"
 import { leagues } from "./leagues"
 import { lineupEntries } from "./lineups"
 import { mvpAwards } from "./mvp-awards"
+import { seasonReferees } from "./season-referees"
 import { seasons } from "./seasons"
 import { sessions } from "./sessions"
 import { teamJoinRequests } from "./team-join"
@@ -29,6 +30,7 @@ const schema = {
 	freeAgentAvailability,
 	freeAgentInvites,
 	lineupEntries,
+	seasonReferees,
 	sessions,
 }
 
@@ -62,6 +64,10 @@ export const relations = defineRelations(schema, (r) => ({
 		winner: r.one.teams({
 			from: r.seasons.winnerId,
 			to: r.teams.id,
+		}),
+		referees: r.many.seasonReferees({
+			from: r.seasons.id,
+			to: r.seasonReferees.seasonId,
 		}),
 	},
 	teams: {
@@ -242,6 +248,16 @@ export const relations = defineRelations(schema, (r) => ({
 			to: r.users.id,
 		}),
 	},
+	seasonReferees: {
+		season: r.one.seasons({
+			from: r.seasonReferees.seasonId,
+			to: r.seasons.id,
+		}),
+		user: r.one.users({
+			from: r.seasonReferees.userId,
+			to: r.users.id,
+		}),
+	},
 	sessions: {
 		user: r.one.users({
 			from: r.sessions.userId,
@@ -280,6 +296,10 @@ export const relations = defineRelations(schema, (r) => ({
 		battedPlays: r.many.gamePlays({
 			from: r.users.id,
 			to: r.gamePlays.batterId,
+		}),
+		seasonRefereeOf: r.many.seasonReferees({
+			from: r.users.id,
+			to: r.seasonReferees.userId,
 		}),
 	},
 }))

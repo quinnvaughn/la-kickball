@@ -335,6 +335,43 @@ export function sortCareerStats(
 	return sortDir === "desc" ? sorted.reverse() : sorted
 }
 
+type BoxScoreStatField = Exclude<CareerStatField, "seasons" | "games">
+
+// A single game's box score line uses the same columns as the career
+// stats table minus the two that only make sense aggregated across
+// multiple games (seasons/games played).
+export const BOX_SCORE_STAT_FIELDS = CAREER_STAT_FIELDS.filter(
+	(field) => field.key !== "seasons" && field.key !== "games",
+) as readonly { key: BoxScoreStatField; label: string }[]
+
+export interface BoxScoreStatEntry {
+	key: BoxScoreStatField
+	label: string
+	value: number
+}
+
+export interface BoxScorePlayer {
+	userId: string
+	firstName: string
+	lastName: string
+	stats: BoxScoreStatEntry[]
+}
+
+export function toBoxScorePlayer(totals: CareerTotals): BoxScorePlayer {
+	const row = computeCareerStats(totals)
+
+	return {
+		userId: row.userId,
+		firstName: row.firstName,
+		lastName: row.lastName,
+		stats: BOX_SCORE_STAT_FIELDS.map(({ key, label }) => ({
+			key,
+			label,
+			value: row[key],
+		})),
+	}
+}
+
 export function paginateCareerStats(
 	rows: CareerStatsRow[],
 	page: number,

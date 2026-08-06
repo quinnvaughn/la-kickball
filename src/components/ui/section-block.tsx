@@ -6,11 +6,13 @@ type Props = {
 	children: React.ReactNode
 	stretch?: boolean
 	bottomBorder?: boolean
+	subtitle?: string
 }
 
 export function SectionBlock({
 	heading,
 	children,
+	subtitle,
 	stretch = false,
 	bottomBorder = false,
 }: Props) {
@@ -25,15 +27,22 @@ export function SectionBlock({
 			})}
 		>
 			<VStack alignItems={stretch ? "stretch" : "start"} gap="5">
-				<h2
-					className={css({
-						fontSize: "2xl",
-						fontWeight: "bold",
-						fontFamily: "heading",
-					})}
-				>
-					{heading}
-				</h2>
+				<VStack gap="1" alignItems="flex-start">
+					<h2
+						className={css({
+							fontSize: "2xl",
+							fontWeight: "bold",
+							fontFamily: "heading",
+						})}
+					>
+						{heading}
+					</h2>
+					{subtitle && (
+						<p className={css({ color: "subtitle", fontSize: "sm" })}>
+							{subtitle}
+						</p>
+					)}
+				</VStack>
 				{children}
 			</VStack>
 		</section>

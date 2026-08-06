@@ -9,6 +9,7 @@ import {
 	gameLogs,
 	games,
 	mvpAwards,
+	seasonReferees,
 	seasons,
 	teamMemberships,
 	teams,
@@ -46,7 +47,12 @@ import {
 	WEEK_MVP_STAT_CATEGORIES,
 	type WeeklySubs,
 } from "../domain/stats"
-import { protectedProcedure, publicProcedure, router } from "../trpc"
+import {
+	adminProcedure,
+	protectedProcedure,
+	publicProcedure,
+	router,
+} from "../trpc"
 
 // Same shape as leagues.ts's careerTotalsForLeague, but scoped to a
 // specific set of players (career-wide, across every league/season
@@ -857,5 +863,68 @@ export const seasonsRouter = router({
 
 				throw error
 			}
+		}),
+
+	// The pool of refs available for a season — what an admin picks from
+	// when assigning games.refId for a given game in that season.
+	referees: adminProcedure
+		.input(z.object({ seasonId: z.uuid() }))
+		.query(async ({ input }) => {
+			const rows = await db.query.seasonReferees.findMany({
+				where: { seasonId: { eq: input.seasonId } },
+				with: {
+					user: { columns: { id: true, firstName: true, lastName: true } },
+				},
+			})
+
+			return rows.map((row) => ({
+				id: row.id,
+				user: row.user as { id: string; firstName: string; lastName: string },
+			}))
+		}),
+
+	addReferee: adminProcedure
+		.input(z.object({ seasonId: z.uuid(), userId: z.uuid() }))
+		.mutation(async ({ input }) => {
+			try {
+				const [referee] = await db
+					.insert(seasonReferees)
+					.values(input)
+					.returning()
+
+				return referee
+			} catch (error) {
+				if (isUniqueConstraintError(error)) {
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: "This person is already a referee for this season.",
+					})
+				}
+
+				throw error
+			}
+		}),
+
+	removeReferee: adminProcedure
+		.input(z.object({ seasonId: z.uuid(), userId: z.uuid() }))
+		.mutation(async ({ input }) => {
+			const [referee] = await db
+				.delete(seasonReferees)
+				.where(
+					and(
+						eq(seasonReferees.seasonId, input.seasonId),
+						eq(seasonReferees.userId, input.userId),
+					),
+				)
+				.returning()
+
+			if (!referee) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "This person isn't a referee for this season.",
+				})
+			}
+
+			return referee
 		}),
 })

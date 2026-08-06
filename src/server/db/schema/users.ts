@@ -21,7 +21,6 @@ export const users = pgTable("users", {
 	location: varchar("location", { length: 100 }),
 
 	isAdmin: boolean("is_admin").notNull().default(false),
-	isRef: boolean("is_ref").notNull().default(false),
 
 	createdAt: timestamp("created_at").notNull().defaultNow(),
 	updatedAt: timestamp("updated_at").notNull().defaultNow(),

@@ -19,7 +19,6 @@ function toPublicUser(user: User) {
 		lastName: user.lastName,
 		email: user.email,
 		isAdmin: user.isAdmin,
-		isRef: user.isRef,
 	}
 }
 
