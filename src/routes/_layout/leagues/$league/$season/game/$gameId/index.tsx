@@ -23,7 +23,6 @@ export const Route = createFileRoute(
 })
 
 function RouteComponent() {
-	const user = useLoaderData({ from: "/_layout" })
 	const season = useLoaderData({ from: "/_layout/leagues/$league/$season" })
 	const { league } = Route.useParams()
 	const game = Route.useLoaderData()
